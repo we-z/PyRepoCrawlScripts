@@ -5,6 +5,9 @@ cloned_repos/
 logs/
 data/
 
+# Environment variables
+.env
+
 # Python
 __pycache__/
 *.py[cod]

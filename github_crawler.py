@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import tiktoken
 from PIL import Image
 import io
+from dotenv import load_dotenv
 
 class GitHubCrawler:
     """Main crawler class for collecting Python repositories from GitHub"""
@@ -603,12 +604,17 @@ class GitHubCrawler:
 
 def main():
     """Main entry point"""
-    # GitHub token must be passed as environment variable
+    # Load environment variables from .env file
+    load_dotenv()
+    
+    # GitHub token must be set as environment variable or in .env file
     github_token = os.environ.get('GITHUB_TOKEN')
     
     if not github_token:
-        print("ERROR: GITHUB_TOKEN environment variable not set!")
-        print("Please set it with: export GITHUB_TOKEN='your_token_here'")
+        print("ERROR: GITHUB_TOKEN not found!")
+        print("Please either:")
+        print("  1. Create a .env file with: GITHUB_TOKEN='your_token_here'")
+        print("  2. Or set environment variable: export GITHUB_TOKEN='your_token_here'")
         sys.exit(1)
     
     # Target: 100 billion tokens
