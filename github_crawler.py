@@ -52,6 +52,10 @@ class GitHubCrawler:
         self.repos_db = self._load_repos_db()
         self.seen_repos = self._load_seen_repos()  # Track all repos we've encountered
         
+        # Search threshold management
+        self.current_min_stars = self.progress.get('current_min_stars', 5000)
+        self.star_threshold_levels = [5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 1]
+        
         # Tokenizer
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
         
@@ -113,7 +117,9 @@ class GitHubCrawler:
             "start_time": datetime.now().isoformat(),
             "last_update": datetime.now().isoformat(),
             "search_queries_completed": [],
-            "current_page": {}
+            "current_page": {},
+            "current_min_stars": 5000,
+            "threshold_expansions": 0
         }
         
         if self.progress_file.exists():
@@ -235,97 +241,158 @@ class GitHubCrawler:
             "pose-estimation", "tracking", "video-analysis", "3d-vision"
         ]
         
-        # Star ranges - focus on quality repos
-        star_ranges = [
-            ">=5000", ">=2000", ">=1000", ">=500", ">=200", ">=100", ">=50"
+        # Create EXCLUSIVE star ranges based on current threshold
+        # This prevents seeing the same repos over and over
+        all_thresholds = [5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 1]
+        
+        # Find where we are in the threshold progression
+        try:
+            current_index = all_thresholds.index(self.current_min_stars)
+        except ValueError:
+            current_index = 0
+        
+        # Create exclusive ranges: 2000-4999, 1000-1999, 500-999, etc.
+        star_ranges = []
+        for i in range(current_index, len(all_thresholds)):
+            min_stars = all_thresholds[i]
+            if i > 0:
+                max_stars = all_thresholds[i-1] - 1
+                star_ranges.append({
+                    "query": f"{min_stars}..{max_stars}",
+                    "desc": f"{min_stars}-{max_stars}"
+                })
+            else:
+                # Top tier has no upper limit
+                star_ranges.append({
+                    "query": f">={min_stars}",
+                    "desc": f"{min_stars}+"
+                })
+        
+        # Multiple sort orders to get diverse repos
+        sort_orders = [
+            ("stars", "desc", "most stars"),
+            ("updated", "desc", "recently updated"),
+            ("forks", "desc", "most forks"),
         ]
         
-        # Generate topic + star queries with proper sorting
+        # Generate topic + star + sort queries
         for topic in ml_topics:
-            for stars in star_ranges[:4]:  # Use top 4 star ranges for each topic
+            for star_range in star_ranges[:3]:  # Use top 3 star ranges for each topic
+                for sort, order, sort_desc in sort_orders:
+                    queries.append({
+                        "query": f"language:python topic:{topic} stars:{star_range['query']}",
+                        "description": f"ML/DL: {topic} ({star_range['desc']} stars, {sort_desc})",
+                        "sort": sort,
+                        "order": order
+                    })
+        
+        # Add recent repos (last 2 years) across different star ranges
+        recent_date = "2023-01-01"
+        for topic in ml_topics[:15]:  # Top 15 topics
+            # Different star ranges for recent repos
+            for star_range in star_ranges[:2]:
                 queries.append({
-                    "query": f"language:python topic:{topic} stars:{stars}",
-                    "description": f"ML/DL: {topic} with {stars} stars",
+                    "query": f"language:python topic:{topic} stars:{star_range['query']} pushed:>{recent_date}",
+                    "description": f"Recent: {topic} ({star_range['desc']} stars, updated 2023+)",
+                    "sort": "updated",
+                    "order": "desc"
+                })
+        
+        # Broad ML/DL queries with exclusive ranges and multiple sorts
+        broad_topics = [
+            "machine-learning", "deep-learning", "artificial-intelligence",
+            "pytorch", "tensorflow", "computer-vision", "nlp", "transformers"
+        ]
+        
+        for broad_topic in broad_topics:
+            for star_range in star_ranges[:3]:
+                for sort, order, sort_desc in sort_orders:
+                    queries.append({
+                        "query": f"language:python {broad_topic} stars:{star_range['query']}",
+                        "description": f"Broad: {broad_topic} ({star_range['desc']} stars, {sort_desc})",
+                        "sort": sort,
+                        "order": order
+                    })
+        
+        # Add created date-based queries to find repos by AGE
+        years = ["2024", "2023", "2022", "2021", "2020", "2019"]
+        core_topics = ["machine-learning", "deep-learning", "pytorch", "tensorflow", "transformers"]
+        
+        for year in years:
+            for topic in core_topics:
+                for star_range in star_ranges[:2]:  # Top 2 ranges
+                    queries.append({
+                        "query": f"language:python {topic} stars:{star_range['query']} created:{year}",
+                        "description": f"Year {year}: {topic} ({star_range['desc']} stars)",
+                        "sort": "stars",
+                        "order": "desc"
+                    })
+        
+        # Add "in:readme" searches for specific ML/DL keywords
+        readme_keywords = [
+            "neural network", "machine learning", "deep learning", "transformer",
+            "CNN", "RNN", "LSTM", "GAN", "VAE", "reinforcement learning",
+            "computer vision", "NLP", "image classification", "object detection"
+        ]
+        
+        for keyword in readme_keywords:
+            for star_range in star_ranges[:2]:
+                queries.append({
+                    "query": f'language:python "{keyword}" in:readme stars:{star_range["query"]}',
+                    "description": f'README: "{keyword}" ({star_range["desc"]} stars)',
                     "sort": "stars",
                     "order": "desc"
                 })
         
-        # Add recent repos (updated in last year) with decent stars
-        for topic in ml_topics[:20]:  # Top 20 topics
+        # Add license-based queries (different licenses attract different types of projects)
+        licenses = ["mit", "apache-2.0", "gpl-3.0", "bsd-3-clause"]
+        for license_type in licenses:
+            for star_range in star_ranges[:2]:
+                queries.append({
+                    "query": f"language:python machine-learning stars:{star_range['query']} license:{license_type}",
+                    "description": f"License {license_type}: ML ({star_range['desc']} stars)",
+                    "sort": "stars",
+                    "order": "desc"
+                })
+        
+        # Size-based queries to catch large repos that might have been missed
+        size_ranges = [">=50000", ">=20000", ">=10000", ">=5000"]
+        for size in size_ranges:
+            for sort, order, sort_desc in sort_orders[:2]:  # stars and updated
+                queries.append({
+                    "query": f"language:python machine-learning size:{size}",
+                    "description": f"Large repos: size {size}KB ({sort_desc})",
+                    "sort": sort,
+                    "order": order
+                })
+        
+        # Language + filename queries (catches repos without proper topics)
+        filenames = ["train.py", "model.py", "inference.py", "dataset.py", "network.py"]
+        for filename in filenames:
+            for star_range in star_ranges[:2]:
+                queries.append({
+                    "query": f"language:python filename:{filename} stars:{star_range['query']}",
+                    "description": f"Filename {filename} ({star_range['desc']} stars)",
+                    "sort": "stars",
+                    "order": "desc"
+                })
+        
+        # Archived vs active repos (sometimes archived repos have great code)
+        for star_range in star_ranges[:2]:
             queries.append({
-                "query": f"language:python topic:{topic} stars:>=100 pushed:>2023-01-01",
-                "description": f"Recent ML/DL: {topic} (updated 2023+)",
-                "sort": "updated",
+                "query": f"language:python machine-learning stars:{star_range['query']} archived:true",
+                "description": f"Archived ML repos ({star_range['desc']} stars)",
+                "sort": "stars",
+                "order": "desc"
+            })
+            queries.append({
+                "query": f"language:python deep-learning stars:{star_range['query']} archived:true",
+                "description": f"Archived DL repos ({star_range['desc']} stars)",
+                "sort": "stars",
                 "order": "desc"
             })
         
-        # High-quality general ML/DL queries
-        high_quality_queries = [
-            {
-                "query": "language:python machine-learning stars:>=1000",
-                "description": "High-star ML repos",
-                "sort": "stars",
-                "order": "desc"
-            },
-            {
-                "query": "language:python deep-learning stars:>=1000",
-                "description": "High-star DL repos",
-                "sort": "stars",
-                "order": "desc"
-            },
-            {
-                "query": "language:python pytorch stars:>=500",
-                "description": "PyTorch repos",
-                "sort": "stars",
-                "order": "desc"
-            },
-            {
-                "query": "language:python tensorflow stars:>=500",
-                "description": "TensorFlow repos",
-                "sort": "stars",
-                "order": "desc"
-            },
-            {
-                "query": "language:python neural-network stars:>=200",
-                "description": "Neural network repos",
-                "sort": "stars",
-                "order": "desc"
-            },
-            {
-                "query": "language:python computer-vision stars:>=200",
-                "description": "Computer vision repos",
-                "sort": "stars",
-                "order": "desc"
-            },
-            {
-                "query": "language:python nlp stars:>=200",
-                "description": "NLP repos",
-                "sort": "stars",
-                "order": "desc"
-            },
-            {
-                "query": "language:python generative-ai stars:>=100",
-                "description": "Generative AI repos",
-                "sort": "updated",
-                "order": "desc"
-            },
-            {
-                "query": "language:python transformers stars:>=100",
-                "description": "Transformer model repos",
-                "sort": "stars",
-                "order": "desc"
-            },
-            {
-                "query": "language:python llm stars:>=100",
-                "description": "LLM repos",
-                "sort": "updated",
-                "order": "desc"
-            }
-        ]
-        
-        queries.extend(high_quality_queries)
-        
-        self.logger.info(f"Generated {len(queries)} ML/DL-focused search queries")
+        self.logger.info(f"Generated {len(queries)} ML/DL-focused search queries (min stars: {self.current_min_stars})")
         return queries
     
     def search_repositories(self, query: str, page: int = 1, per_page: int = 100, 
@@ -494,9 +561,64 @@ class GitHubCrawler:
         query_index = 0
         
         try:
+            cycles_without_progress = 0
+            max_empty_cycles = 2
+            
             while self.progress['total_tokens'] < self.target_tokens:
                 # Get next query
                 if query_index >= len(self.search_queries):
+                    cycles_without_progress += 1
+                    
+                    if cycles_without_progress >= max_empty_cycles:
+                        # Check if we can lower the star threshold
+                        if self._can_expand_search():
+                            self.logger.info("\n" + "="*80)
+                            self.logger.info("🔽 EXPANDING SEARCH - LOWERING STAR THRESHOLD")
+                            self.logger.info("="*80)
+                            
+                            old_threshold = self.current_min_stars
+                            new_threshold = self._expand_search()
+                            
+                            self.logger.info(f"Star threshold: {old_threshold} → {new_threshold}")
+                            self.logger.info(f"This will search for repos with {new_threshold}+ stars")
+                            self.logger.info("Resetting completed queries to search with new threshold...")
+                            
+                            # Reset search state
+                            self.progress['search_queries_completed'] = []
+                            self.progress['current_page'] = {}
+                            self.progress['current_min_stars'] = new_threshold
+                            self.progress['threshold_expansions'] = self.progress.get('threshold_expansions', 0) + 1
+                            self.current_min_stars = new_threshold
+                            
+                            # Regenerate queries with new threshold
+                            self.search_queries = self._generate_search_queries()
+                            
+                            self._save_progress()
+                            
+                            self.logger.info(f"✅ Generated {len(self.search_queries)} new queries")
+                            self.logger.info("🚀 Continuing crawl with expanded search...")
+                            self.logger.info("="*80 + "\n")
+                            
+                            # Reset counters and continue
+                            cycles_without_progress = 0
+                            query_index = 0
+                            continue
+                        else:
+                            # No more thresholds to try
+                            self.logger.info("\n" + "="*80)
+                            self.logger.info("🏁 SEARCH FULLY EXHAUSTED")
+                            self.logger.info("="*80)
+                            self.logger.info(f"Completed {len(self.progress['search_queries_completed'])} queries")
+                            self.logger.info(f"Threshold expansions: {self.progress.get('threshold_expansions', 0)}")
+                            self.logger.info(f"Reached minimum star threshold: {self.current_min_stars}")
+                            self.logger.info("\nAll available ML/DL repositories have been processed.")
+                            self.logger.info("\nOptions to continue:")
+                            self.logger.info("1. Wait for new repos to be created on GitHub")
+                            self.logger.info("2. Manually edit threshold_levels to go even lower")
+                            self.logger.info("3. Add more search topics to _generate_search_queries()")
+                            self.logger.info("="*80)
+                            break
+                    
                     self.logger.info("🔄 Cycling back to beginning of search queries")
                     query_index = 0
                 
@@ -509,6 +631,9 @@ class GitHubCrawler:
                 if query in self.progress['search_queries_completed']:
                     query_index += 1
                     continue
+                
+                # Reset cycle counter when we find a query to process
+                cycles_without_progress = 0
                 
                 progress_pct = (self.progress['total_tokens'] / self.target_tokens) * 100
                 self.logger.info("\n" + "="*80)
@@ -548,11 +673,20 @@ class GitHubCrawler:
                     self.logger.info(f"   Filtered: {len(new_repos)} new, {skipped_count} already seen")
                 
                 if not new_repos:
-                    # No new results for this query, move to next
-                    self.logger.info(f"   No new repos found, moving to next query")
-                    self.progress['search_queries_completed'].append(query)
+                    # Try next page before giving up on this query
+                    if page < 5 and len(repos) > 0:  # Try up to 5 pages
+                        self.logger.info(f"   No new repos on page {page}, trying page {page + 1}...")
+                        self.progress['current_page'][query] = page + 1
+                        self._save_progress()
+                        continue  # Stay on same query, next page
+                    
+                    # No new results even after trying multiple pages, move to next query
+                    self.logger.info(f"   No new repos found after {page} pages, moving to next query")
+                    if query not in self.progress['search_queries_completed']:
+                        self.progress['search_queries_completed'].append(query)
                     if query in self.progress['current_page']:
                         del self.progress['current_page'][query]
+                    self._save_progress()
                     query_index += 1
                     continue
                 
@@ -618,9 +752,11 @@ class GitHubCrawler:
                 
                 # Check if we should move to next query (GitHub limits to 1000 results)
                 if page >= 10:  # 10 pages * 100 per page = 1000 repos
-                    self.progress['search_queries_completed'].append(query)
+                    if query not in self.progress['search_queries_completed']:
+                        self.progress['search_queries_completed'].append(query)
                     if query in self.progress['current_page']:
                         del self.progress['current_page'][query]
+                    self._save_progress()
                     query_index += 1
         
         except KeyboardInterrupt:
@@ -684,6 +820,24 @@ class GitHubCrawler:
         
         self.logger.info("└" + "─"*78 + "┘")
     
+    def _can_expand_search(self) -> bool:
+        """Check if we can lower the star threshold"""
+        try:
+            current_index = self.star_threshold_levels.index(self.current_min_stars)
+            return current_index < len(self.star_threshold_levels) - 1
+        except ValueError:
+            return False
+    
+    def _expand_search(self) -> int:
+        """Lower the star threshold to the next level"""
+        try:
+            current_index = self.star_threshold_levels.index(self.current_min_stars)
+            if current_index < len(self.star_threshold_levels) - 1:
+                return self.star_threshold_levels[current_index + 1]
+        except ValueError:
+            pass
+        return self.current_min_stars
+    
     def _print_final_stats(self):
         """Print final statistics"""
         self.logger.info("\n" + "="*80)
@@ -696,6 +850,8 @@ class GitHubCrawler:
         self.logger.info(f"Repositories failed (actual): {self.progress['repos_failed']}")
         self.logger.info(f"Repositories skipped (already processed): {self.progress.get('repos_skipped', 0)}")
         self.logger.info(f"Search queries completed: {len(self.progress['search_queries_completed'])}")
+        self.logger.info(f"Threshold expansions: {self.progress.get('threshold_expansions', 0)}")
+        self.logger.info(f"Final star threshold: {self.progress.get('current_min_stars', 5000)}")
         
         # Calculate total size
         total_size = sum(repo['stats']['size_bytes'] for repo in self.repos_db.values())
