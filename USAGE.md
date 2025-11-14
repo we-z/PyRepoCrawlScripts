@@ -1,38 +1,56 @@
 # Quick Usage Guide
 
-## ✅ What's New
+## ✅ What's New (Latest Update)
 
-The crawler now has these enhanced features:
+### 🎯 ML/Deep Learning Focus
+- **Removed all web framework queries** (django, flask, fastapi)
+- **Only searches for ML/DL repos** - machine learning, deep learning, neural networks, PyTorch, TensorFlow, etc.
+- 70+ ML/DL-specific topics including: transformers, LLMs, computer vision, NLP, GANs, reinforcement learning, etc.
 
-### 🔄 Auto-Processing of Existing Repos
-- On startup, the script scans `cloned_repos/` directory
-- Any repos not in the database will be automatically tokenized
-- Token counts are added to the total progress
+### 🔍 Smart Deduplication
+- Tracks all repos seen across searches (even if not cloned)
+- **No more "SKIP" spam** - repos are filtered before processing
+- Shows only actual **clone failures**, not skips
+- Separate counters for: cloned, failed (actual errors), and skipped (already processed)
 
-### 📊 Live Statistics Display
+### 📊 Better Search Strategy
+- Queries sorted by stars (high quality first)
+- Recent repos sorted by update date
+- Star thresholds: 5000+, 2000+, 1000+, 500+, 200+, 100+
+- Only repos updated since 2023 for recent searches
+
+### 📈 Enhanced Statistics Display
 - After each repo is processed, you'll see a beautiful stats box showing:
   - Current progress (tokens collected vs. 100B target)
-  - Number of repos cloned and failed
+  - Number of repos cloned, failed (actual), and skipped (duplicates)
   - Total Python files processed
   - Disk usage in GB
   - Processing speed (tokens/sec and repos/min)
   - Time elapsed
   - **Estimated time to completion**
 
+### 🔄 Auto-Processing of Existing Repos
+- On startup, the script scans `cloned_repos/` directory
+- Any repos not in the database will be automatically tokenized
+- Token counts are added to the total progress
+
 ### Example Stats Box:
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ 📊 CURRENT STATISTICS                                                        │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ 🎯 Progress:         139,222,233 / 100,000,000,000 tokens ( 0.139%)         │
-│ 📦 Repos:                 12 cloned  |       0 failed                        │
-│ 📁 Python Files:          18,394 files                                       │
-│ 💾 Disk Usage:             1.56 GB                                           │
-│ ⚡ Speed:             837,239 tokens/sec  ( 4.3 repos/min)                   │
-│ ⏱️  Elapsed:                0:02:46                                           │
-│ 🕐 Est. Time:                1.4 days                                        │
+│ 🎯 Progress:      1,234,567,890 / 100,000,000,000 tokens ( 1.235%)          │
+│ 📦 Repos:            1,658 cloned  |      15 failed                          │
+│ ⏭️  Skipped:         3,842 already processed                                 │
+│ 📁 Python Files:       245,678 files                                         │
+│ 💾 Disk Usage:          12.34 GB                                             │
+│ ⚡ Speed:           1,234,567 tokens/sec  ( 4.5 repos/min)                   │
+│ ⏱️  Elapsed:             5:23:45                                              │
+│ 🕐 Est. Time:             2.3 days                                           │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Note:** The "failed" counter now shows only **actual clone failures** (network errors, permission issues, etc.), not repos that were skipped because they're already in the database.
 
 ## 🚀 Running the Crawler
 

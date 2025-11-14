@@ -47,8 +47,10 @@ class GitHubCrawler:
         # Progress tracking
         self.progress_file = self.data_dir / "progress.json"
         self.repos_db_file = self.data_dir / "repos_database.json"
+        self.seen_repos_file = self.data_dir / "seen_repos.json"
         self.progress = self._load_progress()
         self.repos_db = self._load_repos_db()
+        self.seen_repos = self._load_seen_repos()  # Track all repos we've encountered
         
         # Tokenizer
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -65,6 +67,9 @@ class GitHubCrawler:
         self.logger.info(f"Current tokens collected: {self.progress['total_tokens']:,}")
         self.logger.info(f"Repositories cloned: {self.progress['repos_cloned']}")
         self.logger.info("="*80)
+        
+        # Save progress immediately to persist any migrations
+        self._save_progress()
         
         # Check for already-cloned repos and process them
         self._process_existing_repos()
@@ -100,18 +105,29 @@ class GitHubCrawler:
     
     def _load_progress(self) -> Dict:
         """Load progress from disk"""
-        if self.progress_file.exists():
-            with open(self.progress_file, 'r') as f:
-                return json.load(f)
-        return {
+        default_progress = {
             "total_tokens": 0,
             "repos_cloned": 0,
             "repos_failed": 0,
+            "repos_skipped": 0,
             "start_time": datetime.now().isoformat(),
             "last_update": datetime.now().isoformat(),
             "search_queries_completed": [],
             "current_page": {}
         }
+        
+        if self.progress_file.exists():
+            with open(self.progress_file, 'r') as f:
+                loaded_progress = json.load(f)
+            
+            # Migrate old progress files - add any missing fields
+            for key, default_value in default_progress.items():
+                if key not in loaded_progress:
+                    loaded_progress[key] = default_value
+            
+            return loaded_progress
+        
+        return default_progress
     
     def _load_repos_db(self) -> Dict:
         """Load repository database"""
@@ -120,6 +136,13 @@ class GitHubCrawler:
                 return json.load(f)
         return {}
     
+    def _load_seen_repos(self) -> set:
+        """Load set of all repo IDs we've seen in search results"""
+        if self.seen_repos_file.exists():
+            with open(self.seen_repos_file, 'r') as f:
+                return set(json.load(f))
+        return set()
+    
     def _save_progress(self):
         """Save progress to disk"""
         self.progress['last_update'] = datetime.now().isoformat()
@@ -127,6 +150,8 @@ class GitHubCrawler:
             json.dump(self.progress, f, indent=2)
         with open(self.repos_db_file, 'w') as f:
             json.dump(self.repos_db, f, indent=2)
+        with open(self.seen_repos_file, 'w') as f:
+            json.dump(list(self.seen_repos), f, indent=2)
     
     def _process_existing_repos(self):
         """Process any already-cloned repos that aren't in the database"""
@@ -180,79 +205,131 @@ class GitHubCrawler:
         self.logger.info("")
     
     def _generate_search_queries(self) -> List[Dict]:
-        """Generate diverse search queries for Python repositories"""
+        """Generate diverse search queries for ML/DL Python repositories"""
         queries = []
         
-        # Popular Python topics/frameworks
-        topics = [
-            "machine-learning", "deep-learning", "data-science", "web-scraping",
-            "django", "flask", "fastapi", "pytorch", "tensorflow", "numpy",
-            "pandas", "scikit-learn", "nlp", "computer-vision", "api",
-            "automation", "bot", "web", "cli", "gui", "game", "backend",
-            "frontend", "fullstack", "devops", "testing", "scraper",
-            "crawler", "parser", "database", "orm", "rest-api", "graphql",
-            "microservices", "serverless", "cloud", "aws", "azure", "gcp",
-            "docker", "kubernetes", "ci-cd", "blockchain", "crypto",
-            "finance", "trading", "analytics", "visualization", "plotting",
-            "jupyter", "notebook", "research", "science", "math", "statistics",
-            "algorithms", "data-structures", "security", "cryptography",
-            "authentication", "oauth", "jwt", "websocket", "async", "asyncio",
-            "multiprocessing", "threading", "celery", "redis", "mongodb",
-            "postgresql", "mysql", "sqlite", "elasticsearch", "kafka",
-            "rabbitmq", "graphql", "grpc", "protobuf", "socket", "networking"
+        # ML/DL focused topics only
+        ml_topics = [
+            "machine-learning", "deep-learning", "neural-network", "pytorch", 
+            "tensorflow", "keras", "scikit-learn", "nlp", "natural-language-processing",
+            "computer-vision", "image-processing", "object-detection", "segmentation",
+            "reinforcement-learning", "generative-ai", "transformers", "llm",
+            "large-language-model", "diffusion", "gan", "vae", "autoencoder",
+            "classification", "regression", "clustering", "data-science",
+            "kaggle", "model-training", "neural-networks", "convolutional-neural-network",
+            "recurrent-neural-network", "lstm", "gru", "attention-mechanism",
+            "bert", "gpt", "stable-diffusion", "yolo", "resnet", "vgg",
+            "image-classification", "semantic-segmentation", "instance-segmentation",
+            "face-recognition", "speech-recognition", "audio-processing",
+            "time-series", "forecasting", "anomaly-detection", "recommendation-system",
+            "embeddings", "feature-extraction", "transfer-learning", "fine-tuning",
+            "hyperparameter-tuning", "model-optimization", "quantization",
+            "onnx", "tensorrt", "model-compression", "pruning",
+            "active-learning", "semi-supervised-learning", "self-supervised-learning",
+            "meta-learning", "few-shot-learning", "zero-shot-learning",
+            "graph-neural-network", "gnn", "knowledge-graph", "multimodal",
+            "vision-transformer", "clip", "dalle", "whisper", "chatbot",
+            "text-generation", "text-classification", "sentiment-analysis",
+            "named-entity-recognition", "question-answering", "summarization",
+            "translation", "optical-character-recognition", "ocr",
+            "pose-estimation", "tracking", "video-analysis", "3d-vision"
         ]
         
-        # Stars-based queries
+        # Star ranges - focus on quality repos
         star_ranges = [
-            ">=1000", ">=500", ">=100", ">=50", ">=10", ">=5", ">=1"
+            ">=5000", ">=2000", ">=1000", ">=500", ">=200", ">=100", ">=50"
         ]
         
-        # Size-based queries (in KB)
-        size_ranges = [
-            ">=10000", ">=5000", ">=1000", ">=500", ">=100"
-        ]
-        
-        # Generate topic-based queries
-        for topic in topics:
-            for stars in star_ranges[:3]:  # Use top 3 star ranges
+        # Generate topic + star queries with proper sorting
+        for topic in ml_topics:
+            for stars in star_ranges[:4]:  # Use top 4 star ranges for each topic
                 queries.append({
                     "query": f"language:python topic:{topic} stars:{stars}",
-                    "description": f"Python repos about {topic} with {stars} stars"
+                    "description": f"ML/DL: {topic} with {stars} stars",
+                    "sort": "stars",
+                    "order": "desc"
                 })
         
-        # Generate star-based queries
-        for stars in star_ranges:
+        # Add recent repos (updated in last year) with decent stars
+        for topic in ml_topics[:20]:  # Top 20 topics
             queries.append({
-                "query": f"language:python stars:{stars}",
-                "description": f"Python repos with {stars} stars"
+                "query": f"language:python topic:{topic} stars:>=100 pushed:>2023-01-01",
+                "description": f"Recent ML/DL: {topic} (updated 2023+)",
+                "sort": "updated",
+                "order": "desc"
             })
         
-        # Generate size-based queries
-        for size in size_ranges:
-            queries.append({
-                "query": f"language:python size:{size}",
-                "description": f"Python repos with size {size} KB"
-            })
-        
-        # Add some general queries
-        general_queries = [
-            "language:python sort:stars",
-            "language:python sort:updated",
-            "language:python sort:forks",
-            "language:python is:featured",
-            "language:python archived:false",
+        # High-quality general ML/DL queries
+        high_quality_queries = [
+            {
+                "query": "language:python machine-learning stars:>=1000",
+                "description": "High-star ML repos",
+                "sort": "stars",
+                "order": "desc"
+            },
+            {
+                "query": "language:python deep-learning stars:>=1000",
+                "description": "High-star DL repos",
+                "sort": "stars",
+                "order": "desc"
+            },
+            {
+                "query": "language:python pytorch stars:>=500",
+                "description": "PyTorch repos",
+                "sort": "stars",
+                "order": "desc"
+            },
+            {
+                "query": "language:python tensorflow stars:>=500",
+                "description": "TensorFlow repos",
+                "sort": "stars",
+                "order": "desc"
+            },
+            {
+                "query": "language:python neural-network stars:>=200",
+                "description": "Neural network repos",
+                "sort": "stars",
+                "order": "desc"
+            },
+            {
+                "query": "language:python computer-vision stars:>=200",
+                "description": "Computer vision repos",
+                "sort": "stars",
+                "order": "desc"
+            },
+            {
+                "query": "language:python nlp stars:>=200",
+                "description": "NLP repos",
+                "sort": "stars",
+                "order": "desc"
+            },
+            {
+                "query": "language:python generative-ai stars:>=100",
+                "description": "Generative AI repos",
+                "sort": "updated",
+                "order": "desc"
+            },
+            {
+                "query": "language:python transformers stars:>=100",
+                "description": "Transformer model repos",
+                "sort": "stars",
+                "order": "desc"
+            },
+            {
+                "query": "language:python llm stars:>=100",
+                "description": "LLM repos",
+                "sort": "updated",
+                "order": "desc"
+            }
         ]
         
-        for gq in general_queries:
-            queries.append({
-                "query": gq,
-                "description": f"General query: {gq}"
-            })
+        queries.extend(high_quality_queries)
         
-        self.logger.info(f"Generated {len(queries)} search queries")
+        self.logger.info(f"Generated {len(queries)} ML/DL-focused search queries")
         return queries
     
-    def search_repositories(self, query: str, page: int = 1, per_page: int = 100) -> Optional[Dict]:
+    def search_repositories(self, query: str, page: int = 1, per_page: int = 100, 
+                          sort: str = "stars", order: str = "desc") -> Optional[Dict]:
         """Search GitHub repositories"""
         try:
             url = f"{self.base_url}/search/repositories"
@@ -260,8 +337,8 @@ class GitHubCrawler:
                 "q": query,
                 "page": page,
                 "per_page": per_page,
-                "sort": "stars",
-                "order": "desc"
+                "sort": sort,
+                "order": order
             }
             
             response = requests.get(url, headers=self.headers, params=params, timeout=30)
@@ -284,14 +361,17 @@ class GitHubCrawler:
             self.logger.error(f"Search error: {e}")
             return None
     
-    def clone_repository(self, repo_url: str, repo_name: str, repo_full_name: str) -> Tuple[bool, str]:
-        """Clone a repository with live output"""
+    def clone_repository(self, repo_url: str, repo_name: str, repo_full_name: str) -> Tuple[bool, str, bool]:
+        """Clone a repository with live output
+        
+        Returns:
+            Tuple[bool, str, bool]: (success, path, was_skipped)
+        """
         repo_path = self.repos_dir / repo_name.replace("/", "_")
         
         # Skip if already cloned
         if repo_full_name in self.repos_db:
-            self.logger.info(f"⏭️  SKIP: {repo_full_name} (already processed)")
-            return False, str(repo_path)
+            return False, str(repo_path), True  # Indicate it was skipped
         
         if repo_path.exists():
             self.logger.info(f"📁 EXISTS: {repo_path} - removing old version")
@@ -314,16 +394,16 @@ class GitHubCrawler:
             
             if process.returncode == 0:
                 self.logger.info(f"✅ CLONED: {repo_full_name}")
-                return True, str(repo_path)
+                return True, str(repo_path), False
             else:
                 self.logger.error(f"❌ FAILED: {repo_full_name}")
                 if stderr:
                     self.logger.error(f"   Error: {stderr.strip()}")
-                return False, str(repo_path)
+                return False, str(repo_path), False
                 
         except Exception as e:
             self.logger.error(f"❌ CLONE ERROR: {repo_full_name} - {e}")
-            return False, str(repo_path)
+            return False, str(repo_path), False
     
     def count_tokens_in_file(self, file_path: Path) -> int:
         """Count tokens in a file"""
@@ -422,6 +502,8 @@ class GitHubCrawler:
                 
                 query_info = self.search_queries[query_index]
                 query = query_info['query']
+                sort = query_info.get('sort', 'stars')
+                order = query_info.get('order', 'desc')
                 
                 # Check if query was already completed
                 if query in self.progress['search_queries_completed']:
@@ -432,6 +514,7 @@ class GitHubCrawler:
                 self.logger.info("\n" + "="*80)
                 self.logger.info(f"🔍 SEARCH QUERY #{query_index + 1}: {query}")
                 self.logger.info(f"   Description: {query_info['description']}")
+                self.logger.info(f"   Sort: {sort} ({order})")
                 self.logger.info(f"   Current Progress: {progress_pct:.3f}% ({self.progress['total_tokens']:,} tokens)")
                 self.logger.info("="*80)
                 
@@ -439,7 +522,7 @@ class GitHubCrawler:
                 page = self.progress['current_page'].get(query, 1)
                 
                 # Search repositories
-                results = self.search_repositories(query, page=page)
+                results = self.search_repositories(query, page=page, sort=sort, order=order)
                 
                 if not results or 'items' not in results:
                     self.logger.warning(f"No results for query: {query}")
@@ -450,10 +533,23 @@ class GitHubCrawler:
                 repos = results['items']
                 total_count = results.get('total_count', 0)
                 
-                self.logger.info(f"   Found: {len(repos)} repos on page {page} (Total: {total_count:,})")
+                # Filter out repos we've already seen
+                new_repos = []
+                for repo in repos:
+                    repo_id = str(repo['id'])
+                    if repo_id not in self.seen_repos:
+                        new_repos.append(repo)
+                        self.seen_repos.add(repo_id)
                 
-                if not repos:
-                    # No more results for this query
+                skipped_count = len(repos) - len(new_repos)
+                
+                self.logger.info(f"   Found: {len(repos)} repos on page {page} (Total available: {total_count:,})")
+                if skipped_count > 0:
+                    self.logger.info(f"   Filtered: {len(new_repos)} new, {skipped_count} already seen")
+                
+                if not new_repos:
+                    # No new results for this query, move to next
+                    self.logger.info(f"   No new repos found, moving to next query")
                     self.progress['search_queries_completed'].append(query)
                     if query in self.progress['current_page']:
                         del self.progress['current_page'][query]
@@ -461,12 +557,18 @@ class GitHubCrawler:
                     continue
                 
                 # Process each repository
-                for repo in repos:
+                repos_processed_this_batch = 0
+                for repo in new_repos:
                     repo_name = repo['full_name']
                     repo_url = repo['clone_url']
                     
                     # Clone repository
-                    success, repo_path = self.clone_repository(repo_url, repo_name, repo_name)
+                    success, repo_path, was_skipped = self.clone_repository(repo_url, repo_name, repo_name)
+                    
+                    if was_skipped:
+                        # Already processed, don't count as failed
+                        self.progress['repos_skipped'] += 1
+                        continue
                     
                     if success:
                         # Process repository
@@ -475,6 +577,7 @@ class GitHubCrawler:
                         # Update progress
                         self.progress['total_tokens'] += stats['tokens']
                         self.progress['repos_cloned'] += 1
+                        repos_processed_this_batch += 1
                         
                         # Store in database
                         self.repos_db[repo_name] = {
@@ -502,6 +605,7 @@ class GitHubCrawler:
                             self.logger.info("="*80 + "\n")
                             break
                     else:
+                        # Actual failure (clone error, etc)
                         self.progress['repos_failed'] += 1
                         self._save_progress()
                     
@@ -556,6 +660,7 @@ class GitHubCrawler:
         self.logger.info("├" + "─"*78 + "┤")
         self.logger.info(f"│ 🎯 Progress:      {self.progress['total_tokens']:>15,} / {self.target_tokens:,} tokens ({progress_pct:>6.3f}%) │")
         self.logger.info(f"│ 📦 Repos:         {self.progress['repos_cloned']:>6,} cloned  |  {self.progress['repos_failed']:>6,} failed{' '*21}│")
+        self.logger.info(f"│ ⏭️  Skipped:       {self.progress.get('repos_skipped', 0):>6,} already processed{' '*39}│")
         self.logger.info(f"│ 📁 Python Files:  {total_py_files:>15,} files{' '*35}│")
         self.logger.info(f"│ 💾 Disk Usage:    {total_size / (1024**3):>15.2f} GB{' '*38}│")
         self.logger.info(f"│ ⚡ Speed:         {tokens_per_sec:>15,.0f} tokens/sec  ({repos_per_min:>5.1f} repos/min){' '*8}│")
@@ -588,7 +693,8 @@ class GitHubCrawler:
         self.logger.info(f"Target tokens: {self.target_tokens:,}")
         self.logger.info(f"Progress: {(self.progress['total_tokens']/self.target_tokens*100):.2f}%")
         self.logger.info(f"Repositories cloned: {self.progress['repos_cloned']}")
-        self.logger.info(f"Repositories failed: {self.progress['repos_failed']}")
+        self.logger.info(f"Repositories failed (actual): {self.progress['repos_failed']}")
+        self.logger.info(f"Repositories skipped (already processed): {self.progress.get('repos_skipped', 0)}")
         self.logger.info(f"Search queries completed: {len(self.progress['search_queries_completed'])}")
         
         # Calculate total size
