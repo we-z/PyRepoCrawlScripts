@@ -627,7 +627,7 @@ class GitHubCrawler:
         return stats
     
     def run(self):
-        """Main execution loop"""
+        """Main execution loop""" gp "purge non tokenized data"
         self.logger.info("\n" + "="*80)
         self.logger.info("🚀 STARTING CRAWL")
         self.logger.info("="*80 + "\n")
