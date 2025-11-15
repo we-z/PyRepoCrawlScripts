@@ -101,8 +101,11 @@ class GitHubCrawler:
         # Check for already-cloned repos and process them
         self._process_existing_repos()
         
-        # Purge non-code files from all existing repos
-        self._purge_all_existing_repos()
+        # # Purge non-code files from all existing repos
+        # self._purge_all_existing_repos()
+        
+        # Recalculate accurate statistics on startup
+        self._recalculate_stats()
     
     def _setup_logging(self):
         """Setup comprehensive logging"""
@@ -257,23 +260,85 @@ class GitHubCrawler:
         
         self.logger.info(f"\n🗑️  Purging non-code files from existing repos...")
         self.logger.info(f"Found {len(existing_dirs)} repositories")
+        self.logger.info("")
         
         total_deleted = 0
         total_freed = 0
+        total_repos = len(existing_dirs)
         
-        for repo_dir in existing_dirs:
+        for idx, repo_dir in enumerate(existing_dirs, 1):
+            # Progress bar
+            progress_pct = (idx / total_repos) * 100
+            bar_length = 40
+            filled = int(bar_length * idx / total_repos)
+            bar = '█' * filled + '░' * (bar_length - filled)
+            
             purge_stats = self.purge_non_code_files(repo_dir)
             total_deleted += purge_stats["files_deleted"]
             total_freed += purge_stats["bytes_freed"]
             
-            if purge_stats["files_deleted"] > 0:
-                self.logger.info(f"   {repo_dir.name}: {purge_stats['files_deleted']:,} files, {purge_stats['bytes_freed'] / (1024**2):.1f} MB freed")
+            # Show progress bar
+            self.logger.info(f"   [{bar}] {progress_pct:>5.1f}% ({idx:,}/{total_repos:,}) | {repo_dir.name[:40]:40s} | Deleted: {purge_stats['files_deleted']:>4,} files, {purge_stats['bytes_freed'] / (1024**2):>6.1f} MB")
         
+        self.logger.info("")
         if total_deleted > 0:
             self.logger.info(f"✅ Purge complete: {total_deleted:,} files deleted, {total_freed / (1024**3):.2f} GB freed")
         else:
             self.logger.info("✅ No non-code files found")
         
+        self.logger.info("")
+    
+    def _recalculate_stats(self):
+        """Recalculate accurate statistics from filesystem on startup"""
+        self.logger.info("\n📊 Recalculating accurate statistics...")
+        
+        # Calculate actual disk usage
+        actual_disk_usage = 0
+        actual_total_files = 0
+        
+        if self.repos_dir.exists():
+            repo_dirs = [d for d in self.repos_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
+            total_repos = len(repo_dirs)
+            self.logger.info(f"   Scanning {total_repos:,} repositories...")
+            self.logger.info("")
+            
+            for idx, repo_dir in enumerate(repo_dirs, 1):
+                # Progress bar
+                progress_pct = (idx / total_repos) * 100
+                bar_length = 40
+                filled = int(bar_length * idx / total_repos)
+                bar = '█' * filled + '░' * (bar_length - filled)
+                
+                repo_files = 0
+                repo_size = 0
+                for file_path in repo_dir.rglob('*'):
+                    if file_path.is_file() and '.git' not in file_path.parts:
+                        size = file_path.stat().st_size
+                        actual_disk_usage += size
+                        actual_total_files += 1
+                        repo_files += 1
+                        repo_size += size
+                
+                # Show progress every 100 repos or at key milestones
+                if idx % 100 == 0 or idx == total_repos or idx == 1:
+                    self.logger.info(f"   [{bar}] {progress_pct:>5.1f}% ({idx:,}/{total_repos:,}) | Total: {actual_disk_usage / (1024**3):.1f} GB, {actual_total_files:,} files")
+        
+        # Recalculate token count from database (should be accurate)
+        total_tokens = sum(repo['stats']['tokens'] for repo in self.repos_db.values())
+        total_py_files = sum(repo['stats']['python_files'] for repo in self.repos_db.values())
+        
+        # Update progress if different
+        if total_tokens != self.progress['total_tokens']:
+            self.logger.info(f"   Token count mismatch: {self.progress['total_tokens']:,} → {total_tokens:,}")
+            self.progress['total_tokens'] = total_tokens
+            self._save_progress()
+        
+        self.logger.info("")
+        self.logger.info(f"✅ Statistics recalculated:")
+        self.logger.info(f"   Tokens: {total_tokens:,}")
+        self.logger.info(f"   Actual disk usage: {actual_disk_usage / (1024**3):.2f} GB")
+        self.logger.info(f"   Total files on disk: {actual_total_files:,}")
+        self.logger.info(f"   Python files: {total_py_files:,}")
         self.logger.info("")
     
     def _generate_search_queries(self) -> List[Dict]:
@@ -582,8 +647,6 @@ class GitHubCrawler:
             "bytes_freed": 0
         }
         
-        self.logger.info(f"   🗑️  Purging non-code files...")
-        
         # Use class-level extensions
         keep_extensions = self.CODE_EXTENSIONS | self.TEXT_EXTENSIONS
         
@@ -591,15 +654,10 @@ class GitHubCrawler:
         skip_patterns = {'.git', '.github', 'LICENSE', 'NOTICE', 'COPYING', 'AUTHORS'}
         
         try:
-            files_checked = 0
             for file_path in repo_path.rglob('*'):
                 # Skip .git directory
                 if '.git' in file_path.parts:
                     continue
-                
-                files_checked += 1
-                if files_checked % 1000 == 0:
-                    self.logger.info(f"      Checked {files_checked:,} files, deleted {stats['files_deleted']:,}...")
                     
                 if file_path.is_file():
                     # Check if file should be kept
@@ -640,7 +698,6 @@ class GitHubCrawler:
         except Exception as e:
             self.logger.error(f"Error purging non-code files from {repo_path}: {e}")
         
-        self.logger.info(f"   ✅ Purge done: {stats['files_deleted']:,} files deleted ({stats['bytes_freed'] / (1024**2):.1f} MB freed)")
         return stats
     
     def process_repository(self, repo_path: Path, repo_full_name: str) -> Dict:
@@ -658,9 +715,12 @@ class GitHubCrawler:
         self.logger.info(f"📊 PROCESSING: {repo_full_name}")
         
         # First, purge non-code files
+        self.logger.info(f"   🗑️  Purging non-code files...")
         purge_stats = self.purge_non_code_files(repo_path)
         stats["files_deleted"] = purge_stats["files_deleted"]
         stats["bytes_freed"] = purge_stats["bytes_freed"]
+        if purge_stats["files_deleted"] > 0:
+            self.logger.info(f"   ✅ Purged: {purge_stats['files_deleted']:,} files ({purge_stats['bytes_freed'] / (1024**2):.1f} MB)")
         
         self.logger.info(f"   📝 Counting tokens...")
         
@@ -939,8 +999,20 @@ class GitHubCrawler:
         """Show inline statistics after each repo"""
         progress_pct = (self.progress['total_tokens'] / self.target_tokens) * 100
         
-        # Calculate totals
-        total_size = sum(repo['stats']['size_bytes'] for repo in self.repos_db.values())
+        # Calculate ACTUAL disk usage from filesystem (not cached values)
+        self.logger.info(f"   📊 Calculating actual disk usage...")
+        actual_disk_usage = 0
+        if self.repos_dir.exists():
+            try:
+                for file_path in self.repos_dir.rglob('*'):
+                    if file_path.is_file() and '.git' not in file_path.parts:
+                        actual_disk_usage += file_path.stat().st_size
+            except Exception as e:
+                self.logger.debug(f"Error calculating disk usage: {e}")
+                # Fallback to cached value
+                actual_disk_usage = sum(repo['stats']['size_bytes'] for repo in self.repos_db.values())
+        
+        # Calculate totals from database
         total_py_files = sum(repo['stats']['python_files'] for repo in self.repos_db.values())
         
         # Calculate time-based stats
@@ -962,7 +1034,7 @@ class GitHubCrawler:
         self.logger.info(f"│ 📦 Repos:         {self.progress['repos_cloned']:>6,} cloned  |  {self.progress['repos_failed']:>6,} failed{' '*21}│")
         self.logger.info(f"│ ⏭️  Skipped:       {self.progress.get('repos_skipped', 0):>6,} already processed{' '*39}│")
         self.logger.info(f"│ 📁 Python Files:  {total_py_files:>15,} files{' '*35}│")
-        self.logger.info(f"│ 💾 Disk Usage:    {total_size / (1024**3):>15.2f} GB{' '*38}│")
+        self.logger.info(f"│ 💾 Disk Usage:    {actual_disk_usage / (1024**3):>15.2f} GB (actual on disk){' '*24}│")
         self.logger.info(f"│ ⚡ Speed:         {tokens_per_sec:>15,.0f} tokens/sec  ({repos_per_min:>5.1f} repos/min){' '*8}│")
         self.logger.info(f"│ ⏱️  Elapsed:       {str(elapsed).split('.')[0]:>20s}{' '*34}│")
         
@@ -1017,9 +1089,18 @@ class GitHubCrawler:
         self.logger.info(f"Threshold expansions: {self.progress.get('threshold_expansions', 0)}")
         self.logger.info(f"Final star threshold: {self.progress.get('current_min_stars', 5000)}")
         
-        # Calculate total size
-        total_size = sum(repo['stats']['size_bytes'] for repo in self.repos_db.values())
-        self.logger.info(f"Total size: {total_size / (1024**3):.2f} GB")
+        # Calculate ACTUAL disk size from filesystem
+        self.logger.info("Calculating actual disk usage...")
+        actual_disk_usage = 0
+        if self.repos_dir.exists():
+            try:
+                for file_path in self.repos_dir.rglob('*'):
+                    if file_path.is_file() and '.git' not in file_path.parts:
+                        actual_disk_usage += file_path.stat().st_size
+            except Exception as e:
+                self.logger.debug(f"Error calculating disk usage: {e}")
+        
+        self.logger.info(f"Actual disk size: {actual_disk_usage / (1024**3):.2f} GB")
         
         # Calculate total Python files
         total_py_files = sum(repo['stats']['python_files'] for repo in self.repos_db.values())
