@@ -17,8 +17,6 @@ from typing import Dict, List, Optional, Tuple
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import tiktoken
-from PIL import Image
-import io
 from dotenv import load_dotenv
 
 class GitHubCrawler:
@@ -48,9 +46,11 @@ class GitHubCrawler:
         self.progress_file = self.data_dir / "progress.json"
         self.repos_db_file = self.data_dir / "repos_database.json"
         self.seen_repos_file = self.data_dir / "seen_repos.json"
+        self.query_results_file = self.data_dir / "query_results.json"
         self.progress = self._load_progress()
         self.repos_db = self._load_repos_db()
         self.seen_repos = self._load_seen_repos()  # Track all repos we've encountered
+        self.query_results = self._load_query_results()  # Track which query returned which repos
         
         # Search threshold management
         self.current_min_stars = self.progress.get('current_min_stars', 5000)
@@ -77,6 +77,9 @@ class GitHubCrawler:
         
         # Check for already-cloned repos and process them
         self._process_existing_repos()
+        
+        # Purge non-code files from all existing repos
+        self._purge_all_existing_repos()
     
     def _setup_logging(self):
         """Setup comprehensive logging"""
@@ -149,6 +152,13 @@ class GitHubCrawler:
                 return set(json.load(f))
         return set()
     
+    def _load_query_results(self) -> Dict:
+        """Load query results history"""
+        if self.query_results_file.exists():
+            with open(self.query_results_file, 'r') as f:
+                return json.load(f)
+        return {}
+    
     def _save_progress(self):
         """Save progress to disk"""
         self.progress['last_update'] = datetime.now().isoformat()
@@ -158,6 +168,8 @@ class GitHubCrawler:
             json.dump(self.repos_db, f, indent=2)
         with open(self.seen_repos_file, 'w') as f:
             json.dump(list(self.seen_repos), f, indent=2)
+        with open(self.query_results_file, 'w') as f:
+            json.dump(self.query_results, f, indent=2)
     
     def _process_existing_repos(self):
         """Process any already-cloned repos that aren't in the database"""
@@ -207,6 +219,37 @@ class GitHubCrawler:
             self._save_progress()
         else:
             self.logger.info("✅ All existing repos already in database")
+        
+        self.logger.info("")
+    
+    def _purge_all_existing_repos(self):
+        """Purge non-code files from all existing repos"""
+        if not self.repos_dir.exists():
+            return
+        
+        existing_dirs = [d for d in self.repos_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
+        
+        if not existing_dirs:
+            return
+        
+        self.logger.info(f"\n🗑️  Purging non-code files from existing repos...")
+        self.logger.info(f"Found {len(existing_dirs)} repositories")
+        
+        total_deleted = 0
+        total_freed = 0
+        
+        for repo_dir in existing_dirs:
+            purge_stats = self.purge_non_code_files(repo_dir)
+            total_deleted += purge_stats["files_deleted"]
+            total_freed += purge_stats["bytes_freed"]
+            
+            if purge_stats["files_deleted"] > 0:
+                self.logger.info(f"   {repo_dir.name}: {purge_stats['files_deleted']:,} files, {purge_stats['bytes_freed'] / (1024**2):.1f} MB freed")
+        
+        if total_deleted > 0:
+            self.logger.info(f"✅ Purge complete: {total_deleted:,} files deleted, {total_freed / (1024**3):.2f} GB freed")
+        else:
+            self.logger.info("✅ No non-code files found")
         
         self.logger.info("")
     
@@ -484,23 +527,53 @@ class GitHubCrawler:
             self.logger.debug(f"Token count error for {file_path}: {e}")
             return 0
     
-    def compress_image(self, image_path: Path):
-        """Compress an image file"""
+    def purge_non_code_files(self, repo_path: Path) -> Dict:
+        """Delete all non-code/non-text files (images, videos, audio, etc.)"""
+        stats = {
+            "files_deleted": 0,
+            "bytes_freed": 0
+        }
+        
+        # Extensions to DELETE
+        non_code_extensions = {
+            # Images
+            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.ico', '.webp', '.tiff', '.tif',
+            # Videos
+            '.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.webm', '.m4v', '.mpeg', '.mpg',
+            # Audio
+            '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus',
+            # Archives (already extracted)
+            '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar', '.xz',
+            # Fonts
+            '.ttf', '.otf', '.woff', '.woff2', '.eot',
+            # Binaries/Executables
+            '.exe', '.dll', '.so', '.dylib', '.bin', '.dat',
+            # PDFs and docs (no code in these)
+            '.pdf', '.doc', '.docx', '.ppt', '.pptx',
+            # Database files
+            '.db', '.sqlite', '.sqlite3',
+            # Mac files
+            '.DS_Store',
+        }
+        
         try:
-            with Image.open(image_path) as img:
-                # Convert to RGB if necessary
-                if img.mode in ('RGBA', 'LA', 'P'):
-                    img = img.convert('RGB')
-                
-                # Resize if too large
-                max_size = (800, 800)
-                img.thumbnail(max_size, Image.Resampling.LANCZOS)
-                
-                # Save with compression
-                img.save(image_path, optimize=True, quality=70)
-                
+            for file_path in repo_path.rglob('*'):
+                if file_path.is_file():
+                    ext = file_path.suffix.lower()
+                    
+                    if ext in non_code_extensions:
+                        file_size = file_path.stat().st_size
+                        try:
+                            file_path.unlink()
+                            stats["files_deleted"] += 1
+                            stats["bytes_freed"] += file_size
+                        except Exception as e:
+                            self.logger.debug(f"Could not delete {file_path}: {e}")
+                            
         except Exception as e:
-            self.logger.debug(f"Image compression error for {image_path}: {e}")
+            self.logger.error(f"Error purging non-code files from {repo_path}: {e}")
+        
+        return stats
     
     def process_repository(self, repo_path: Path, repo_full_name: str) -> Dict:
         """Process a cloned repository"""
@@ -509,16 +582,21 @@ class GitHubCrawler:
             "python_files": 0,
             "tokens": 0,
             "size_bytes": 0,
-            "images_compressed": 0,
+            "files_deleted": 0,
+            "bytes_freed": 0,
             "files_processed": 0
         }
         
         self.logger.info(f"📊 PROCESSING: {repo_full_name}")
         
+        # First, purge non-code files
+        purge_stats = self.purge_non_code_files(repo_path)
+        stats["files_deleted"] = purge_stats["files_deleted"]
+        stats["bytes_freed"] = purge_stats["bytes_freed"]
+        
         # Extensions to count tokens
         code_extensions = {'.py', '.pyx', '.pyi', '.pyw', '.ipynb'}
         text_extensions = {'.txt', '.md', '.rst', '.json', '.yaml', '.yml', '.toml', '.cfg', '.ini'}
-        image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
         
         try:
             for file_path in repo_path.rglob('*'):
@@ -537,15 +615,11 @@ class GitHubCrawler:
                         
                         if ext in code_extensions:
                             stats["python_files"] += 1
-                    
-                    # Compress images
-                    elif ext in image_extensions:
-                        self.compress_image(file_path)
-                        stats["images_compressed"] += 1
             
             self.logger.info(f"   Files: {stats['total_files']:,} | Python: {stats['python_files']:,}")
             self.logger.info(f"   Tokens: {stats['tokens']:,} | Size: {stats['size_bytes']:,} bytes")
-            self.logger.info(f"   Images compressed: {stats['images_compressed']}")
+            if stats['files_deleted'] > 0:
+                self.logger.info(f"   Purged: {stats['files_deleted']:,} non-code files ({stats['bytes_freed']:,} bytes freed)")
             
         except Exception as e:
             self.logger.error(f"Processing error for {repo_full_name}: {e}")
@@ -660,11 +734,26 @@ class GitHubCrawler:
                 
                 # Filter out repos we've already seen
                 new_repos = []
+                repo_ids_in_results = []
                 for repo in repos:
                     repo_id = str(repo['id'])
+                    repo_ids_in_results.append(repo_id)
                     if repo_id not in self.seen_repos:
                         new_repos.append(repo)
                         self.seen_repos.add(repo_id)
+                
+                # Save query results for future reference
+                query_key = f"{query}|{sort}|{order}|page{page}"
+                if query_key not in self.query_results:
+                    self.query_results[query_key] = {
+                        "query": query,
+                        "sort": sort,
+                        "order": order,
+                        "page": page,
+                        "repo_ids": repo_ids_in_results,
+                        "searched_at": datetime.now().isoformat(),
+                        "found_new": len(new_repos)
+                    }
                 
                 skipped_count = len(repos) - len(new_repos)
                 
