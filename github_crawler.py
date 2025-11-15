@@ -22,6 +22,29 @@ from dotenv import load_dotenv
 class GitHubCrawler:
     """Main crawler class for collecting Python repositories from GitHub"""
     
+    # Extensions to KEEP (everything else gets deleted)
+    CODE_EXTENSIONS = {
+        # Python
+        '.py', '.pyx', '.pyi', '.pyw', '.ipynb',
+        # Other code (for context in ML repos)
+        '.js', '.ts', '.jsx', '.tsx', '.java', '.cpp', '.c', '.h', '.hpp', '.cs', 
+        '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.jl',
+        '.sh', '.bash', '.zsh', '.fish',
+    }
+    
+    TEXT_EXTENSIONS = {
+        # Documentation
+        '.md', '.rst', '.txt',
+        # Config/data files
+        '.json', '.yaml', '.yml', '.toml', '.xml', '.cfg', '.ini', '.conf',
+        # Web
+        '.html', '.css', '.scss', '.sass', '.less',
+        # Requirements/dependencies
+        '.lock', '.requirements',
+        # Git and special files
+        '.gitignore', '.gitattributes', '.editorconfig', '.env',
+    }
+    
     def __init__(self, github_token: str, target_tokens: int = 100_000_000_000):
         self.github_token = github_token
         self.target_tokens = target_tokens
@@ -516,63 +539,108 @@ class GitHubCrawler:
             return False, str(repo_path), False
     
     def count_tokens_in_file(self, file_path: Path) -> int:
-        """Count tokens in a file"""
+        """Count tokens in a file with intelligent size limits"""
         try:
+            file_size = file_path.stat().st_size
+            ext = file_path.suffix.lower()
+            
+            # Different size limits for different file types
+            # .txt files are often data files, not documentation
+            if ext == '.txt' and file_size > 1 * 1024 * 1024:  # 1MB limit for .txt
+                self.logger.debug(f"Skipping large .txt file ({file_size / (1024**2):.1f} MB): {file_path.name}")
+                return 0
+            
+            # Code files can be larger, but not too large
+            if ext in self.CODE_EXTENSIONS and file_size > 10 * 1024 * 1024:  # 10MB limit for code
+                self.logger.debug(f"Skipping large code file ({file_size / (1024**2):.1f} MB): {file_path.name}")
+                return 0
+            
+            # Other text files
+            if file_size > 5 * 1024 * 1024:  # 5MB limit for other files
+                self.logger.debug(f"Skipping large file ({file_size / (1024**2):.1f} MB): {file_path.name}")
+                return 0
+            
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
+                
+                # Skip very large content (safety check)
+                if len(content) > 5_000_000:  # 5M characters max
+                    self.logger.debug(f"Skipping large content ({len(content):,} chars): {file_path.name}")
+                    return 0
+                
                 # Allow special tokens to be encoded as normal text
                 tokens = self.tokenizer.encode(content, disallowed_special=())
                 return len(tokens)
         except Exception as e:
-            self.logger.debug(f"Token count error for {file_path}: {e}")
+            self.logger.debug(f"Token count error for {file_path.name}: {e}")
             return 0
     
     def purge_non_code_files(self, repo_path: Path) -> Dict:
-        """Delete all non-code/non-text files (images, videos, audio, etc.)"""
+        """Delete all files EXCEPT code and text files - inverted logic"""
         stats = {
             "files_deleted": 0,
             "bytes_freed": 0
         }
         
-        # Extensions to DELETE
-        non_code_extensions = {
-            # Images
-            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.ico', '.webp', '.tiff', '.tif',
-            # Videos
-            '.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.webm', '.m4v', '.mpeg', '.mpg',
-            # Audio
-            '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus',
-            # Archives (already extracted)
-            '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar', '.xz',
-            # Fonts
-            '.ttf', '.otf', '.woff', '.woff2', '.eot',
-            # Binaries/Executables
-            '.exe', '.dll', '.so', '.dylib', '.bin', '.dat',
-            # PDFs and docs (no code in these)
-            '.pdf', '.doc', '.docx', '.ppt', '.pptx',
-            # Database files
-            '.db', '.sqlite', '.sqlite3',
-            # Mac files
-            '.DS_Store',
-        }
+        self.logger.info(f"   🗑️  Purging non-code files...")
+        
+        # Use class-level extensions
+        keep_extensions = self.CODE_EXTENSIONS | self.TEXT_EXTENSIONS
+        
+        # Files/dirs to always skip (don't delete)
+        skip_patterns = {'.git', '.github', 'LICENSE', 'NOTICE', 'COPYING', 'AUTHORS'}
         
         try:
+            files_checked = 0
             for file_path in repo_path.rglob('*'):
-                if file_path.is_file():
-                    ext = file_path.suffix.lower()
+                # Skip .git directory
+                if '.git' in file_path.parts:
+                    continue
+                
+                files_checked += 1
+                if files_checked % 1000 == 0:
+                    self.logger.info(f"      Checked {files_checked:,} files, deleted {stats['files_deleted']:,}...")
                     
-                    if ext in non_code_extensions:
-                        file_size = file_path.stat().st_size
+                if file_path.is_file():
+                    # Check if file should be kept
+                    ext = file_path.suffix.lower()
+                    filename = file_path.name
+                    file_size = file_path.stat().st_size
+                    
+                    # Skip special files
+                    if filename in skip_patterns or filename.upper() in skip_patterns:
+                        continue
+                    
+                    # Keep files with code/text extensions OR no extension (often Makefiles, Dockerfiles, etc.)
+                    should_keep = ext in keep_extensions or ext == ''
+                    
+                    # BUT delete large .txt files (likely data files, not docs)
+                    if ext == '.txt' and file_size > 1 * 1024 * 1024:  # >1MB txt = data file
+                        should_keep = False
+                        self.logger.debug(f"Marking large .txt as data file: {filename} ({file_size / (1024**2):.1f} MB)")
+                    
+                    # Also delete large .json/.csv files (likely datasets)
+                    if ext in {'.json', '.csv'} and file_size > 5 * 1024 * 1024:  # >5MB
+                        should_keep = False
+                        self.logger.debug(f"Marking large {ext} as dataset: {filename} ({file_size / (1024**2):.1f} MB)")
+                    
+                    if not should_keep:
+                        # DELETE this file
                         try:
                             file_path.unlink()
                             stats["files_deleted"] += 1
                             stats["bytes_freed"] += file_size
+                            
+                            # Log large deletions
+                            if file_size > 1 * 1024 * 1024:
+                                self.logger.info(f"      Deleted: {filename} ({file_size / (1024**2):.1f} MB, {ext})")
                         except Exception as e:
                             self.logger.debug(f"Could not delete {file_path}: {e}")
                             
         except Exception as e:
             self.logger.error(f"Error purging non-code files from {repo_path}: {e}")
         
+        self.logger.info(f"   ✅ Purge done: {stats['files_deleted']:,} files deleted ({stats['bytes_freed'] / (1024**2):.1f} MB freed)")
         return stats
     
     def process_repository(self, repo_path: Path, repo_full_name: str) -> Dict:
@@ -594,13 +662,18 @@ class GitHubCrawler:
         stats["files_deleted"] = purge_stats["files_deleted"]
         stats["bytes_freed"] = purge_stats["bytes_freed"]
         
-        # Extensions to count tokens
-        code_extensions = {'.py', '.pyx', '.pyi', '.pyw', '.ipynb'}
-        text_extensions = {'.txt', '.md', '.rst', '.json', '.yaml', '.yml', '.toml', '.cfg', '.ini'}
+        self.logger.info(f"   📝 Counting tokens...")
         
         try:
+            files_checked = 0
             for file_path in repo_path.rglob('*'):
                 if file_path.is_file():
+                    files_checked += 1
+                    
+                    # Progress logging every 500 files
+                    if files_checked % 500 == 0:
+                        self.logger.info(f"      Progress: {files_checked:,} files checked, {stats['tokens']:,} tokens so far...")
+                    
                     stats["total_files"] += 1
                     file_size = file_path.stat().st_size
                     stats["size_bytes"] += file_size
@@ -608,14 +681,16 @@ class GitHubCrawler:
                     ext = file_path.suffix.lower()
                     
                     # Process Python and text files for tokens
-                    if ext in code_extensions or ext in text_extensions:
+                    if ext in self.CODE_EXTENSIONS or ext in self.TEXT_EXTENSIONS:
                         tokens = self.count_tokens_in_file(file_path)
-                        stats["tokens"] += tokens
-                        stats["files_processed"] += 1
-                        
-                        if ext in code_extensions:
-                            stats["python_files"] += 1
+                        if tokens > 0:
+                            stats["tokens"] += tokens
+                            stats["files_processed"] += 1
+                            
+                            if ext in self.CODE_EXTENSIONS:
+                                stats["python_files"] += 1
             
+            self.logger.info(f"   ✅ Tokenization complete")
             self.logger.info(f"   Files: {stats['total_files']:,} | Python: {stats['python_files']:,}")
             self.logger.info(f"   Tokens: {stats['tokens']:,} | Size: {stats['size_bytes']:,} bytes")
             if stats['files_deleted'] > 0:
