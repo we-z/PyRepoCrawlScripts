@@ -95,14 +95,15 @@ class GitHubCrawler:
         self.logger.info(f"Repositories cloned: {self.progress['repos_cloned']}")
         self.logger.info("="*80)
         
+        # Reset session counters
+        self.progress['session_start'] = datetime.now().isoformat()
+        self.progress['repos_this_session'] = 0
+        
         # Save progress immediately to persist any migrations
         self._save_progress()
         
         # Check for already-cloned repos and process them
-        self._process_existing_repos()
-        
-        # # Purge non-code files from all existing repos
-        # self._purge_all_existing_repos()
+        # self._process_existing_repos()
         
         # Recalculate accurate statistics on startup
         self._recalculate_stats()
@@ -148,7 +149,9 @@ class GitHubCrawler:
             "search_queries_completed": [],
             "current_page": {},
             "current_min_stars": 5000,
-            "threshold_expansions": 0
+            "threshold_expansions": 0,
+            "session_start": datetime.now().isoformat(),
+            "repos_this_session": 0
         }
         
         if self.progress_file.exists():
@@ -211,119 +214,92 @@ class GitHubCrawler:
         self.logger.info(f"\n🔍 Checking for existing cloned repositories...")
         self.logger.info(f"Found {len(existing_dirs)} directories in cloned_repos/")
         
-        new_repos_processed = 0
-        for repo_dir in existing_dirs:
-            # Convert directory name back to repo name format
-            repo_name = repo_dir.name.replace("_", "/", 1)
-            
-            if repo_name not in self.repos_db:
-                self.logger.info(f"📦 Processing existing repo: {repo_name}")
-                
-                stats = self.process_repository(repo_dir, repo_name)
-                
-                # Update progress
-                self.progress['total_tokens'] += stats['tokens']
-                self.progress['repos_cloned'] += 1
-                
-                # Store in database (without full metadata since we don't have it)
-                self.repos_db[repo_name] = {
-                    "url": "unknown",
-                    "path": str(repo_dir),
-                    "stats": stats,
-                    "cloned_at": datetime.now().isoformat(),
-                    "stars": 0,
-                    "forks": 0,
-                    "size": 0,
-                    "note": "Processed from existing directory"
-                }
-                
-                new_repos_processed += 1
-                
-        if new_repos_processed > 0:
-            self.logger.info(f"✅ Processed {new_repos_processed} existing repos")
-            self.logger.info(f"💾 Total tokens now: {self.progress['total_tokens']:,}")
-            self._save_progress()
-        else:
+        # Count how many need processing
+        repos_to_process = [d for d in existing_dirs if d.name.replace("_", "/", 1) not in self.repos_db]
+        
+        if not repos_to_process:
             self.logger.info("✅ All existing repos already in database")
-        
-        self.logger.info("")
-    
-    def _purge_all_existing_repos(self):
-        """Purge non-code files from all existing repos"""
-        if not self.repos_dir.exists():
+            self.logger.info("")
             return
         
-        existing_dirs = [d for d in self.repos_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
-        
-        if not existing_dirs:
-            return
-        
-        self.logger.info(f"\n🗑️  Purging non-code files from existing repos...")
-        self.logger.info(f"Found {len(existing_dirs)} repositories")
+        total_repos = len(repos_to_process)
+        self.logger.info(f"📦 Need to process: {total_repos:,} repos")
         self.logger.info("")
         
-        total_deleted = 0
-        total_freed = 0
-        total_repos = len(existing_dirs)
+        # Reset token counter to build up from 0
+        self.logger.info("🔄 Resetting token counter to 0 (will recalculate from repos)")
+        self.progress['total_tokens'] = 0
+        self.progress['repos_cloned'] = 0
+        self.logger.info("")
         
-        for idx, repo_dir in enumerate(existing_dirs, 1):
+        new_repos_processed = 0
+        for idx, repo_dir in enumerate(repos_to_process, 1):
             # Progress bar
             progress_pct = (idx / total_repos) * 100
             bar_length = 40
             filled = int(bar_length * idx / total_repos)
             bar = '█' * filled + '░' * (bar_length - filled)
             
-            purge_stats = self.purge_non_code_files(repo_dir)
-            total_deleted += purge_stats["files_deleted"]
-            total_freed += purge_stats["bytes_freed"]
+            # Convert directory name back to repo name format
+            repo_name = repo_dir.name.replace("_", "/", 1)
             
-            # Show progress bar
-            self.logger.info(f"   [{bar}] {progress_pct:>5.1f}% ({idx:,}/{total_repos:,}) | {repo_dir.name[:40]:40s} | Deleted: {purge_stats['files_deleted']:>4,} files, {purge_stats['bytes_freed'] / (1024**2):>6.1f} MB")
-        
-        self.logger.info("")
-        if total_deleted > 0:
-            self.logger.info(f"✅ Purge complete: {total_deleted:,} files deleted, {total_freed / (1024**3):.2f} GB freed")
-        else:
-            self.logger.info("✅ No non-code files found")
+            # Skip purging for existing repos - just count tokens
+            stats = self.process_repository(repo_dir, repo_name, skip_purge=True)
+            
+            # Update progress
+            self.progress['total_tokens'] += stats['tokens']
+            self.progress['repos_cloned'] += 1
+            
+            # Store in database (without full metadata since we don't have it)
+            self.repos_db[repo_name] = {
+                "url": "unknown",
+                "path": str(repo_dir),
+                "stats": stats,
+                "cloned_at": datetime.now().isoformat(),
+                "stars": 0,
+                "forks": 0,
+                "size": 0,
+                "note": "Processed from existing directory"
+            }
+            
+            new_repos_processed += 1
+            
+            # Show progress bar every repo
+            self.logger.info(f"   [{bar}] {progress_pct:>5.1f}% ({idx:,}/{total_repos:,}) | Tokens: {stats['tokens']:>10,} | Total: {self.progress['total_tokens']:,}")
+            
+            # Save progress every 100 repos
+            if idx % 100 == 0:
+                self._save_progress()
+                
+        if new_repos_processed > 0:
+            self.logger.info("")
+            self.logger.info(f"✅ Processed {new_repos_processed:,} existing repos")
+            self.logger.info(f"💾 Total tokens now: {self.progress['total_tokens']:,}")
+            self._save_progress()
         
         self.logger.info("")
     
     def _recalculate_stats(self):
-        """Recalculate accurate statistics from filesystem on startup"""
-        self.logger.info("\n📊 Recalculating accurate statistics...")
+        """Recalculate accurate statistics using fast du command"""
+        self.logger.info("\n📊 Recalculating statistics...")
         
-        # Calculate actual disk usage
+        # Use fast du command for disk usage
         actual_disk_usage = 0
-        actual_total_files = 0
-        
         if self.repos_dir.exists():
-            repo_dirs = [d for d in self.repos_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
-            total_repos = len(repo_dirs)
-            self.logger.info(f"   Scanning {total_repos:,} repositories...")
-            self.logger.info("")
-            
-            for idx, repo_dir in enumerate(repo_dirs, 1):
-                # Progress bar
-                progress_pct = (idx / total_repos) * 100
-                bar_length = 40
-                filled = int(bar_length * idx / total_repos)
-                bar = '█' * filled + '░' * (bar_length - filled)
-                
-                repo_files = 0
-                repo_size = 0
-                for file_path in repo_dir.rglob('*'):
-                    if file_path.is_file() and '.git' not in file_path.parts:
-                        size = file_path.stat().st_size
-                        actual_disk_usage += size
-                        actual_total_files += 1
-                        repo_files += 1
-                        repo_size += size
-                
-                # Show progress every 100 repos or at key milestones
-                if idx % 100 == 0 or idx == total_repos or idx == 1:
-                    self.logger.info(f"   [{bar}] {progress_pct:>5.1f}% ({idx:,}/{total_repos:,}) | Total: {actual_disk_usage / (1024**3):.1f} GB, {actual_total_files:,} files")
+            try:
+                result = subprocess.run(
+                    ['du', '-sb', str(self.repos_dir)],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                if result.returncode == 0:
+                    actual_disk_usage = int(result.stdout.split()[0])
+                    self.logger.info(f"   Actual disk usage: {actual_disk_usage / (1024**3):.2f} GB")
+            except Exception as e:
+                self.logger.debug(f"Error getting disk usage: {e}")
         
-        # Recalculate token count from database (should be accurate)
+        # Recalculate token count from database
         total_tokens = sum(repo['stats']['tokens'] for repo in self.repos_db.values())
         total_py_files = sum(repo['stats']['python_files'] for repo in self.repos_db.values())
         
@@ -333,11 +309,9 @@ class GitHubCrawler:
             self.progress['total_tokens'] = total_tokens
             self._save_progress()
         
-        self.logger.info("")
-        self.logger.info(f"✅ Statistics recalculated:")
+        self.logger.info(f"✅ Stats verified:")
         self.logger.info(f"   Tokens: {total_tokens:,}")
-        self.logger.info(f"   Actual disk usage: {actual_disk_usage / (1024**3):.2f} GB")
-        self.logger.info(f"   Total files on disk: {actual_total_files:,}")
+        self.logger.info(f"   Repos: {len(self.repos_db):,}")
         self.logger.info(f"   Python files: {total_py_files:,}")
         self.logger.info("")
     
@@ -582,21 +556,42 @@ class GitHubCrawler:
             
             # Clone with progress
             process = subprocess.Popen(
-                ["git", "clone", "--depth", "1", "--quiet", repo_url, str(repo_path)],
+                ["git", "clone", "--depth", "1", "--progress", repo_url, str(repo_path)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                universal_newlines=True
+                universal_newlines=True,
+                bufsize=1
             )
             
-            stdout, stderr = process.communicate()
+            # Show git progress on same line (like native git)
+            print("   ", end='', flush=True)  # Indent for alignment
+            
+            for line in process.stderr:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Show progress on same line with \r
+                if 'Counting objects' in line or 'Receiving objects' in line or 'Resolving deltas' in line:
+                    # Check if it's a "done" line
+                    if 'done' in line.lower():
+                        print(f"\r   {line}")  # Final line with newline
+                    else:
+                        # Update same line
+                        print(f"\r   {line}", end='', flush=True)
+            
+            print()  # Final newline after progress
+            process.wait()
             
             if process.returncode == 0:
                 self.logger.info(f"✅ CLONED: {repo_full_name}")
                 return True, str(repo_path), False
             else:
                 self.logger.error(f"❌ FAILED: {repo_full_name}")
-                if stderr:
-                    self.logger.error(f"   Error: {stderr.strip()}")
+                # Read any remaining error output
+                remaining = process.stderr.read()
+                if remaining:
+                    self.logger.error(f"   Error: {remaining.strip()}")
                 return False, str(repo_path), False
                 
         except Exception as e:
@@ -700,8 +695,14 @@ class GitHubCrawler:
         
         return stats
     
-    def process_repository(self, repo_path: Path, repo_full_name: str) -> Dict:
-        """Process a cloned repository"""
+    def process_repository(self, repo_path: Path, repo_full_name: str, skip_purge: bool = False) -> Dict:
+        """Process a cloned repository
+        
+        Args:
+            repo_path: Path to repository
+            repo_full_name: Full name of repository
+            skip_purge: If True, skip purging non-code files (for existing repos)
+        """
         stats = {
             "total_files": 0,
             "python_files": 0,
@@ -714,13 +715,14 @@ class GitHubCrawler:
         
         self.logger.info(f"📊 PROCESSING: {repo_full_name}")
         
-        # First, purge non-code files
-        self.logger.info(f"   🗑️  Purging non-code files...")
-        purge_stats = self.purge_non_code_files(repo_path)
-        stats["files_deleted"] = purge_stats["files_deleted"]
-        stats["bytes_freed"] = purge_stats["bytes_freed"]
-        if purge_stats["files_deleted"] > 0:
-            self.logger.info(f"   ✅ Purged: {purge_stats['files_deleted']:,} files ({purge_stats['bytes_freed'] / (1024**2):.1f} MB)")
+        # Purge non-code files (only for newly cloned repos)
+        if not skip_purge:
+            self.logger.info(f"   🗑️  Purging non-code files...")
+            purge_stats = self.purge_non_code_files(repo_path)
+            stats["files_deleted"] = purge_stats["files_deleted"]
+            stats["bytes_freed"] = purge_stats["bytes_freed"]
+            if purge_stats["files_deleted"] > 0:
+                self.logger.info(f"   ✅ Purged: {purge_stats['files_deleted']:,} files ({purge_stats['bytes_freed'] / (1024**2):.1f} MB)")
         
         self.logger.info(f"   📝 Counting tokens...")
         
@@ -935,6 +937,7 @@ class GitHubCrawler:
                         # Update progress
                         self.progress['total_tokens'] += stats['tokens']
                         self.progress['repos_cloned'] += 1
+                        self.progress['repos_this_session'] = self.progress.get('repos_this_session', 0) + 1
                         repos_processed_this_batch += 1
                         
                         # Store in database
@@ -999,18 +1002,21 @@ class GitHubCrawler:
         """Show inline statistics after each repo"""
         progress_pct = (self.progress['total_tokens'] / self.target_tokens) * 100
         
-        # Calculate ACTUAL disk usage from filesystem (not cached values)
-        self.logger.info(f"   📊 Calculating actual disk usage...")
+        # Use fast disk usage calculation (du command)
         actual_disk_usage = 0
-        if self.repos_dir.exists():
-            try:
-                for file_path in self.repos_dir.rglob('*'):
-                    if file_path.is_file() and '.git' not in file_path.parts:
-                        actual_disk_usage += file_path.stat().st_size
-            except Exception as e:
-                self.logger.debug(f"Error calculating disk usage: {e}")
-                # Fallback to cached value
-                actual_disk_usage = sum(repo['stats']['size_bytes'] for repo in self.repos_db.values())
+        try:
+            result = subprocess.run(
+                ['du', '-sb', str(self.repos_dir)],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode == 0:
+                actual_disk_usage = int(result.stdout.split()[0])
+        except Exception as e:
+            self.logger.debug(f"Error getting disk usage: {e}")
+            # Fallback to cached value
+            actual_disk_usage = sum(repo['stats']['size_bytes'] for repo in self.repos_db.values())
         
         # Calculate totals from database
         total_py_files = sum(repo['stats']['python_files'] for repo in self.repos_db.values())
@@ -1027,16 +1033,21 @@ class GitHubCrawler:
             tokens_per_sec = 0
             repos_per_min = 0
         
+        # Session stats
+        session_start = datetime.fromisoformat(self.progress.get('session_start', self.progress['start_time']))
+        session_elapsed = datetime.now() - session_start
+        repos_this_session = self.progress.get('repos_this_session', 0)
+        
         self.logger.info("┌" + "─"*78 + "┐")
         self.logger.info(f"│ 📊 CURRENT STATISTICS{' '*56}│")
         self.logger.info("├" + "─"*78 + "┤")
         self.logger.info(f"│ 🎯 Progress:      {self.progress['total_tokens']:>15,} / {self.target_tokens:,} tokens ({progress_pct:>6.3f}%) │")
-        self.logger.info(f"│ 📦 Repos:         {self.progress['repos_cloned']:>6,} cloned  |  {self.progress['repos_failed']:>6,} failed{' '*21}│")
-        self.logger.info(f"│ ⏭️  Skipped:       {self.progress.get('repos_skipped', 0):>6,} already processed{' '*39}│")
+        self.logger.info(f"│ 📦 All-Time:      {self.progress['repos_cloned']:>6,} cloned  |  {self.progress['repos_failed']:>6,} failed{' '*21}│")
+        self.logger.info(f"│ 🆕 This Session:  {repos_this_session:>6,} cloned  |  Session time: {str(session_elapsed).split('.')[0]:<15s}{' '*6}│")
         self.logger.info(f"│ 📁 Python Files:  {total_py_files:>15,} files{' '*35}│")
-        self.logger.info(f"│ 💾 Disk Usage:    {actual_disk_usage / (1024**3):>15.2f} GB (actual on disk){' '*24}│")
+        self.logger.info(f"│ 💾 Disk Usage:    {actual_disk_usage / (1024**3):>15.2f} GB{' '*38}│")
         self.logger.info(f"│ ⚡ Speed:         {tokens_per_sec:>15,.0f} tokens/sec  ({repos_per_min:>5.1f} repos/min){' '*8}│")
-        self.logger.info(f"│ ⏱️  Elapsed:       {str(elapsed).split('.')[0]:>20s}{' '*34}│")
+        self.logger.info(f"│ ⏱️  Total Elapsed: {str(elapsed).split('.')[0]:>20s}{' '*34}│")
         
         # Estimate completion time
         if tokens_per_sec > 0:
@@ -1089,16 +1100,20 @@ class GitHubCrawler:
         self.logger.info(f"Threshold expansions: {self.progress.get('threshold_expansions', 0)}")
         self.logger.info(f"Final star threshold: {self.progress.get('current_min_stars', 5000)}")
         
-        # Calculate ACTUAL disk size from filesystem
-        self.logger.info("Calculating actual disk usage...")
+        # Use fast du command for disk usage
         actual_disk_usage = 0
         if self.repos_dir.exists():
             try:
-                for file_path in self.repos_dir.rglob('*'):
-                    if file_path.is_file() and '.git' not in file_path.parts:
-                        actual_disk_usage += file_path.stat().st_size
+                result = subprocess.run(
+                    ['du', '-sb', str(self.repos_dir)],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                if result.returncode == 0:
+                    actual_disk_usage = int(result.stdout.split()[0])
             except Exception as e:
-                self.logger.debug(f"Error calculating disk usage: {e}")
+                self.logger.debug(f"Error getting disk usage: {e}")
         
         self.logger.info(f"Actual disk size: {actual_disk_usage / (1024**3):.2f} GB")
         
