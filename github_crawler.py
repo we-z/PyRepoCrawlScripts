@@ -37,6 +37,8 @@ class GitHubCrawler:
         '.md', '.rst', '.txt',
         # Config/data files
         '.json', '.yaml', '.yml', '.toml', '.xml', '.cfg', '.ini', '.conf',
+        # CSV files (keep for data science/ML datasets)
+        '.csv', '.tsv',
         # Web
         '.html', '.css', '.scss', '.sass', '.less',
         # Requirements/dependencies
@@ -672,8 +674,8 @@ class GitHubCrawler:
                         should_keep = False
                         self.logger.debug(f"Marking large .txt as data file: {filename} ({file_size / (1024**2):.1f} MB)")
                     
-                    # Also delete large .json/.csv files (likely datasets)
-                    if ext in {'.json', '.csv'} and file_size > 5 * 1024 * 1024:  # >5MB
+                    # Also delete large .json files (likely datasets), but keep CSV
+                    if ext == '.json' and file_size > 5 * 1024 * 1024:  # >5MB
                         should_keep = False
                         self.logger.debug(f"Marking large {ext} as dataset: {filename} ({file_size / (1024**2):.1f} MB)")
                     
