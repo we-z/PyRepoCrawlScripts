@@ -4,6 +4,7 @@ cloned_repos/
 # Data and logs
 logs/
 data/
+repos_to_clone.json
 
 # Environment variables
 .env
