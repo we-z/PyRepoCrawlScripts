@@ -5,6 +5,7 @@ cloned_repos/
 logs/
 data/
 repos_to_clone.json
+repos_cloned.json
 
 # Environment variables
 .env
@@ -46,4 +47,3 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
-
