@@ -1,223 +1,80 @@
 #!/usr/bin/env python3
-"""
-Git Repository Cloner
-Clones repos from repos_to_clone.json and purges non-code files
-"""
-
-import os
-import sys
-import json
-import shutil
-import logging
-import subprocess
-from datetime import datetime
+"""Git Cloner - Clones repos from repos_to_clone.json and purges non-code files"""
+import sys, json, shutil, subprocess
 from pathlib import Path
-from typing import Dict
+
+KEEP_EXT = {'.py', '.js', '.ts', '.java', '.cpp', '.c', '.h', '.sh', '.md', '.rst', '.txt',
+            '.json', '.yaml', '.yml', '.toml', '.xml', '.cfg', '.ini', '.csv', '.html', '.css'}
 
 class GitCloner:
-    """Clone repositories and purge non-code files"""
-    
-    # Extensions to KEEP
-    CODE_EXTENSIONS = {
-        '.py', '.pyx', '.pyi', '.pyw', '.ipynb',
-        '.js', '.ts', '.jsx', '.tsx', '.java', '.cpp', '.c', '.h', '.hpp', '.cs', 
-        '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.jl',
-        '.sh', '.bash', '.zsh', '.fish',
-    }
-    
-    TEXT_EXTENSIONS = {
-        '.md', '.rst', '.txt',
-        '.json', '.yaml', '.yml', '.toml', '.xml', '.cfg', '.ini', '.conf',
-        '.csv', '.tsv',
-        '.html', '.css', '.scss', '.sass', '.less',
-        '.lock', '.requirements',
-        '.gitignore', '.gitattributes', '.editorconfig', '.env',
-    }
-    
     def __init__(self):
-        self.base_dir = Path(__file__).parent
-        self.repos_dir = self.base_dir / "cloned_repos"
+        base = Path(__file__).parent
+        self.repos_dir = base / "cloned_repos"
         self.repos_dir.mkdir(exist_ok=True)
-        
-        self.input_file = self.base_dir / "repos_to_clone.json"
-        self.cloned_file = self.base_dir / "repos_cloned.json"
-        
-        self.cloned_repos = self._load_cloned()
-        self._setup_logging()
+        self.cloned = set(json.load(open(base / "repos_cloned.json"))) if (base / "repos_cloned.json").exists() else set()
+        self.cloned_file = base / "repos_cloned.json"
     
-    def _setup_logging(self):
-        """Setup logging"""
-        formatter = logging.Formatter('%(asctime)s | %(message)s', datefmt='%H:%M:%S')
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(formatter)
-        
-        self.logger = logging.getLogger('GitCloner')
-        self.logger.setLevel(logging.INFO)
-        self.logger.addHandler(console_handler)
-    
-    def _load_cloned(self) -> set:
-        """Load already cloned repos"""
-        if self.cloned_file.exists():
-            with open(self.cloned_file, 'r') as f:
-                return set(json.load(f))
-        return set()
-    
-    def _save_cloned(self):
-        """Save cloned repos list"""
-        with open(self.cloned_file, 'w') as f:
-            json.dump(list(self.cloned_repos), f, indent=2)
-    
-    def clone_repository(self, repo_url: str, repo_name: str) -> bool:
-        """Clone a repository with live progress"""
-        repo_path = self.repos_dir / repo_name.replace("/", "_")
-        
-        if repo_path.exists():
-            shutil.rmtree(repo_path)
-        
+    def clone(self, url: str, name: str) -> bool:
+        path = self.repos_dir / name.replace("/", "_")
+        if path.exists(): shutil.rmtree(path)
         try:
-            # Clone with progress
-            process = subprocess.Popen(
-                ["git", "clone", "--depth", "1", "--progress", repo_url, str(repo_path)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-                bufsize=1
-            )
-            
-            # Show git progress on same line
+            p = subprocess.Popen(["git", "clone", "--depth", "1", "--progress", url, str(path)],
+                               stderr=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True, bufsize=1)
             print("   ", end='', flush=True)
-            
-            for line in process.stderr:
-                line = line.strip()
-                if not line:
-                    continue
-                
-                if 'Counting objects' in line or 'Receiving objects' in line or 'Resolving deltas' in line:
-                    if 'done' in line.lower():
-                        print(f"\r   {line}")
-                    else:
-                        print(f"\r   {line}", end='', flush=True)
-            
+            for line in p.stderr:
+                if line.strip() and ('Receiving objects' in line or 'Resolving deltas' in line):
+                    print(f"\r   {line.strip()}", end='' if 'done' not in line.lower() else '\n', flush=True)
             print()
-            process.wait()
-            
-            return process.returncode == 0
-                
-        except Exception as e:
-            self.logger.error(f"   Clone error: {e}")
-            return False
+            p.wait()
+            return p.returncode == 0
+        except: return False
     
-    def purge_non_code_files(self, repo_path: Path) -> Dict:
-        """Delete all files except code and text"""
-        stats = {"files_deleted": 0, "bytes_freed": 0}
-        keep_extensions = self.CODE_EXTENSIONS | self.TEXT_EXTENSIONS
-        skip_patterns = {'.git', '.github', 'LICENSE', 'NOTICE', 'COPYING', 'AUTHORS'}
-        
-        try:
-            for file_path in repo_path.rglob('*'):
-                if '.git' in file_path.parts or not file_path.is_file():
-                    continue
-                
-                ext = file_path.suffix.lower()
-                filename = file_path.name
-                file_size = file_path.stat().st_size
-                
-                if filename in skip_patterns or filename.upper() in skip_patterns:
-                    continue
-                
-                should_keep = ext in keep_extensions or ext == ''
-                
-                # Delete large .txt files (data files)
-                if ext == '.txt' and file_size > 1 * 1024 * 1024:
-                    should_keep = False
-                
-                # Delete large .json files (datasets)
-                if ext == '.json' and file_size > 5 * 1024 * 1024:
-                    should_keep = False
-                
-                if not should_keep:
-                    try:
-                        file_path.unlink()
-                        stats["files_deleted"] += 1
-                        stats["bytes_freed"] += file_size
-                    except:
-                        pass
-        except Exception as e:
-            self.logger.error(f"   Purge error: {e}")
-        
+    def purge(self, path: Path):
+        stats = [0, 0]  # files, bytes
+        for f in path.rglob('*'):
+            if f.is_file() and '.git' not in f.parts and f.suffix.lower() not in KEEP_EXT and f.suffix != '':
+                # Also purge large .txt (>1MB) and .json (>5MB)
+                size = f.stat().st_size
+                if (f.suffix == '.txt' and size > 1024*1024) or (f.suffix == '.json' and size > 5*1024*1024):
+                    try: f.unlink(); stats[0] += 1; stats[1] += size
+                    except: pass
+                elif f.suffix.lower() not in KEEP_EXT:
+                    try: f.unlink(); stats[0] += 1; stats[1] += size
+                    except: pass
         return stats
     
     def run(self):
-        """Clone all repos from repos_to_clone.json"""
-        if not self.input_file.exists():
-            self.logger.error(f"❌ {self.input_file} not found! Run github_searcher.py first.")
+        input_file = self.repos_dir.parent / "repos_to_clone.json"
+        if not input_file.exists():
+            print("❌ repos_to_clone.json not found! Run github_searcher.py first.")
             return
         
-        with open(self.input_file, 'r') as f:
-            repos_to_clone = json.load(f)
+        repos = [r for r in json.load(open(input_file)) if r['full_name'] not in self.cloned]
+        total = len(repos)
+        print(f"📦 Cloning {total:,} repos\n")
         
-        total_repos = len(repos_to_clone)
-        repos_remaining = [r for r in repos_to_clone if r['full_name'] not in self.cloned_repos]
-        
-        self.logger.info("="*80)
-        self.logger.info("📦 Git Repository Cloner")
-        self.logger.info(f"Total repos to clone: {len(repos_remaining):,} (of {total_repos:,})")
-        self.logger.info("="*80)
-        print()
-        
-        cloned = 0
-        failed = 0
-        
-        for idx, repo in enumerate(repos_remaining, 1):
-            repo_name = repo['full_name']
+        cloned, failed = 0, 0
+        for i, repo in enumerate(repos, 1):
+            pct = i / total * 100
+            bar = '█' * int(40 * i / total) + '░' * (40 - int(40 * i / total))
+            print(f"[{bar}] {pct:>5.1f}% ({i:,}/{total:,}) | Cloned: {cloned:,} | Failed: {failed:,}")
+            print(f"🔄 {repo['full_name']} ({repo['stars']} ⭐)")
             
-            # Progress bar
-            progress_pct = (idx / len(repos_remaining)) * 100
-            bar_length = 40
-            filled = int(bar_length * idx / len(repos_remaining))
-            bar = '█' * filled + '░' * (bar_length - filled)
-            
-            self.logger.info(f"[{bar}] {progress_pct:>5.1f}% ({idx:,}/{len(repos_remaining):,})")
-            self.logger.info(f"🔄 CLONING: {repo_name} ({repo['stars']} ⭐)")
-            self.logger.info(f"   URL: {repo['clone_url']}")
-            
-            success = self.clone_repository(repo['clone_url'], repo_name)
-            
-            if success:
-                self.logger.info(f"✅ CLONED: {repo_name}")
-                
-                # Purge non-code files
-                repo_path = self.repos_dir / repo_name.replace("/", "_")
-                purge_stats = self.purge_non_code_files(repo_path)
-                
-                if purge_stats['files_deleted'] > 0:
-                    self.logger.info(f"   🗑️  Purged: {purge_stats['files_deleted']:,} files, {purge_stats['bytes_freed'] / (1024**2):.1f} MB freed")
-                
-                self.cloned_repos.add(repo_name)
+            if self.clone(repo['clone_url'], repo['full_name']):
+                print(f"✅ CLONED")
+                files, bytes_freed = self.purge(self.repos_dir / repo['full_name'].replace("/", "_"))
+                if files > 0: print(f"   🗑️  Purged: {files:,} files, {bytes_freed / 1024**2:.1f} MB")
+                self.cloned.add(repo['full_name'])
                 cloned += 1
-                
-                # Save progress every 10 repos
-                if cloned % 10 == 0:
-                    self._save_cloned()
+                if cloned % 10 == 0: json.dump(list(self.cloned), open(self.cloned_file, 'w'))
             else:
-                self.logger.error(f"❌ FAILED: {repo_name}")
+                print(f"❌ FAILED")
                 failed += 1
-            
             print()
         
-        self._save_cloned()
-        
-        self.logger.info("="*80)
-        self.logger.info(f"✅ Cloning complete!")
-        self.logger.info(f"Cloned: {cloned:,} | Failed: {failed:,}")
-        self.logger.info("="*80)
-
-
-def main():
-    cloner = GitCloner()
-    cloner.run()
-
+        json.dump(list(self.cloned), open(self.cloned_file, 'w'))
+        print(f"\n✅ Done! Cloned: {cloned:,} | Failed: {failed:,}")
 
 if __name__ == "__main__":
-    main()
+    GitCloner().run()
 
