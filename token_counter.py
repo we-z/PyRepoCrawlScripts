@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Token Counter
-Fast token counting for all repos in cloned_repos/ with progress bar
-"""
-
+"""Token Counter for cloned_repos/"""
 import sys
 import json
 from datetime import datetime
@@ -11,145 +7,83 @@ from pathlib import Path
 import tiktoken
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-class TokenCounter:
-    """Fast token counting with progress bar"""
-    
-    CODE_EXTENSIONS = {
-        '.py', '.pyx', '.pyi', '.pyw', '.ipynb',
-        '.js', '.ts', '.jsx', '.tsx', '.java', '.cpp', '.c', '.h', '.hpp', '.cs', 
-        '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.jl',
-        '.sh', '.bash', '.zsh', '.fish',
-    }
-    
-    TEXT_EXTENSIONS = {
-        '.md', '.rst', '.txt',
-        '.json', '.yaml', '.yml', '.toml', '.xml', '.cfg', '.ini', '.conf',
-        '.csv', '.tsv',
-        '.html', '.css', '.scss', '.sass', '.less',
-        '.lock', '.requirements',
-        '.gitignore', '.gitattributes', '.editorconfig', '.env',
-    }
-    
-    def __init__(self):
-        self.base_dir = Path(__file__).parent
-        self.repos_dir = self.base_dir / "cloned_repos"
-        self.output_file = self.base_dir / "token_counts.json"
-        self.tokenizer = tiktoken.get_encoding("cl100k_base")
-    
-    def count_tokens_in_file(self, file_path: Path) -> int:
-        """Count tokens in a file with size limits"""
-        try:
-            file_size = file_path.stat().st_size
-            ext = file_path.suffix.lower()
-            
-            # Size limits
-            if ext == '.txt' and file_size > 1 * 1024 * 1024:
-                return 0
-            if ext in self.CODE_EXTENSIONS and file_size > 10 * 1024 * 1024:
-                return 0
-            if file_size > 5 * 1024 * 1024:
-                return 0
-            
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-                if len(content) > 5_000_000:
-                    return 0
-                tokens = self.tokenizer.encode(content, disallowed_special=())
-                return len(tokens)
-        except:
-            return 0
-    
-    def count_repo_tokens(self, repo_path: Path) -> Dict:
-        """Count tokens in a single repo"""
-        stats = {"tokens": 0, "python_files": 0, "total_files": 0}
-        
-        try:
-            for file_path in repo_path.rglob('*'):
-                if file_path.is_file() and '.git' not in file_path.parts:
-                    stats["total_files"] += 1
-                    ext = file_path.suffix.lower()
-                    
-                    if ext in self.CODE_EXTENSIONS or ext in self.TEXT_EXTENSIONS:
-                        tokens = self.count_tokens_in_file(file_path)
-                        if tokens > 0:
-                            stats["tokens"] += tokens
-                            if ext in self.CODE_EXTENSIONS:
-                                stats["python_files"] += 1
-        except:
-            pass
-        
-        return stats
-    
-    def run(self):
-        """Count tokens in all repos with progress bar"""
-        if not self.repos_dir.exists():
-            print("❌ No cloned_repos directory found!")
-            return
-        
-        repo_dirs = [d for d in self.repos_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
-        total_repos = len(repo_dirs)
-        
-        print("="*80)
-        print("📊 Token Counter")
-        print(f"Repos to count: {total_repos:,}")
-        print("="*80)
-        print()
-        
-        results = {}
-        total_tokens = 0
-        total_py_files = 0
-        
-        # Use parallel processing for speed
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {executor.submit(self.count_repo_tokens, repo_dir): repo_dir for repo_dir in repo_dirs}
-            
-            completed = 0
-            for future in as_completed(futures):
-                repo_dir = futures[future]
-                stats = future.result()
-                
-                repo_name = repo_dir.name.replace("_", "/", 1)
-                results[repo_name] = stats
-                
-                total_tokens += stats['tokens']
-                total_py_files += stats['python_files']
-                completed += 1
-                
-                # Progress bar
-                progress_pct = (completed / total_repos) * 100
-                bar_length = 50
-                filled = int(bar_length * completed / total_repos)
-                bar = '█' * filled + '░' * (bar_length - filled)
-                
-                print(f"\r[{bar}] {progress_pct:>5.1f}% ({completed:,}/{total_repos:,}) | Tokens: {total_tokens:>15,} | Repo: {repo_name[:40]:40s}", end='', flush=True)
-        
-        print()
-        print()
-        
-        # Save results
-        with open(self.output_file, 'w') as f:
-            json.dump({
-                "total_tokens": total_tokens,
-                "total_repos": total_repos,
-                "total_py_files": total_py_files,
-                "counted_at": datetime.now().isoformat(),
-                "repos": results
-            }, f, indent=2)
-        
-        print("="*80)
-        print("✅ Token counting complete!")
-        print(f"Total tokens: {total_tokens:,}")
-        print(f"Total repos: {total_repos:,}")
-        print(f"Python files: {total_py_files:,}")
-        print(f"Saved to: {self.output_file}")
-        print("="*80)
+BASE_DIR = Path(__file__).parent
+REPOS_DIR = BASE_DIR / "cloned_repos"
+OUTPUT_FILE = BASE_DIR / "token_counts.json"
+TOKENIZER = tiktoken.get_encoding("cl100k_base")
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+MAX_CONTENT_LEN = 5_000_000 # 5 million characters
 
+def count_tokens_in_file(file_path: Path) -> int:
+    """Counts tokens in a single file, skipping large or non-UTF8 files."""
+    try:
+        if file_path.stat().st_size > MAX_FILE_SIZE:
+            return 0
+        content = file_path.read_text(encoding='utf-8')
+        if len(content) > MAX_CONTENT_LEN:
+            return 0
+        return len(TOKENIZER.encode(content, disallowed_special=()))
+    except (IOError, UnicodeDecodeError,AttributeError,FileNotFoundError):
+        return 0
+
+def count_repo_tokens(repo_path: Path) -> dict:
+    """Counts tokens for all processable files in a repository."""
+    stats = {"tokens": 0, "files_processed": 0}
+    try:
+        for file_path in repo_path.rglob('*'):
+            if file_path.is_file() and '.git' not in file_path.parts:
+                tokens = count_tokens_in_file(file_path)
+                if tokens > 0:
+                    stats["tokens"] += tokens
+                    stats["files_processed"] += 1
+    except Exception:
+        pass  # Ignore errors for a single repo and continue
+    return stats
 
 def main():
-    counter = TokenCounter()
-    counter.run()
+    """Main function to count tokens in all repositories."""
+    if not REPOS_DIR.exists():
+        print(f"❌ No '{REPOS_DIR.name}' directory found!")
+        sys.exit(1)
 
+    repo_dirs = [d for d in REPOS_DIR.iterdir() if d.is_dir() and not d.name.startswith('.')]
+    total_repos = len(repo_dirs)
+    print(f"📊 Counting tokens in {total_repos:,} repositories...")
+
+    results = {}
+    total_tokens, total_files = 0, 0
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {executor.submit(count_repo_tokens, repo_dir): repo_dir for repo_dir in repo_dirs}
+        
+        for i, future in enumerate(as_completed(futures), 1):
+            repo_dir = futures[future]
+            repo_name = repo_dir.name.replace("_", "/", 1)
+            try:
+                stats = future.result()
+                results[repo_name] = stats
+                total_tokens += stats['tokens']
+                total_files += stats['files_processed']
+                
+                progress = (i / total_repos) * 100
+                bar = '█' * int(progress / 2) + '░' * (50 - int(progress / 2))
+                print(f"\r[{bar}] {progress:>5.1f}% ({i:,}/{total_repos:,}) | Tokens: {total_tokens:>15,}", end='', flush=True)
+            except Exception as e:
+                print(f"\nError processing {repo_name}: {e}")
+
+    print(f"\n\n✅ Token counting complete!")
+    
+    output_data = {
+        "total_tokens": total_tokens,
+        "total_repos": total_repos,
+        "total_files_processed": total_files,
+        "counted_at": datetime.now().isoformat(),
+        "repos": results
+    }
+    OUTPUT_FILE.write_text(json.dumps(output_data, indent=2))
+
+    print(f"Total tokens: {total_tokens:,}")
+    print(f"Saved to: {OUTPUT_FILE}")
 
 if __name__ == "__main__":
     main()
-
