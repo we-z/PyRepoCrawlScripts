@@ -49,7 +49,7 @@ class GitHubSearcher:
         
         query_num = 0
         for topic in topics:
-            for stars in ["200..499", "100..199", "50..99", "20..49", "10..19", "5..9", "1..4"]:
+            for stars in [">=500", "200..499", "100..199", "50..99", "20..49", "10..19", "5..9", "1..4"]:
                 for sort in ["stars", "updated", "forks"]:
                     query_num += 1
                     query = f"language:python topic:{topic} stars:{stars}"
