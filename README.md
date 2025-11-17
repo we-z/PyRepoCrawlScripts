@@ -37,9 +37,30 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Basic Usage
+### Option 1: Run Complete Pipeline (Recommended)
 
-Simply run the crawler:
+Run the complete pipeline that searches, clones, and counts tokens in sequence:
+
+```bash
+./run_all.sh
+```
+
+This script runs three steps:
+1. **Search**: Uses `github_searcher.py` to find Python repositories on GitHub
+2. **Clone**: Uses `git_cloner.py` to clone the found repositories
+3. **Count**: Uses `token_counter.py` to count tokens in the cloned repositories
+
+The script will automatically activate the virtual environment and handle errors at each step.
+
+### Option 2: Run All-in-One Crawler
+
+Run the integrated crawler that combines all functionality:
+
+```bash
+./run_crawler.sh
+```
+
+Or directly:
 
 ```bash
 python3 github_crawler.py
@@ -55,13 +76,15 @@ The script is pre-configured with your GitHub token and will:
 
 ### Resume After Interruption
 
-If interrupted (Ctrl+C or system crash), simply run the script again:
+If interrupted (Ctrl+C or system crash), simply run either script again:
 
 ```bash
-python3 github_crawler.py
+./run_crawler.sh
+# or
+./run_all.sh
 ```
 
-It will automatically resume from where it left off.
+Both will automatically resume from where they left off.
 
 ## Output Structure
 
