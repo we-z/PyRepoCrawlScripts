@@ -1,0 +1,852 @@
+{
+  "total_tokens": 183468870,
+  "total_repos": 211,
+  "total_files_processed": 84999,
+  "counted_at": "2025-11-17T20:48:34.714891",
+  "repos": {
+    "humphd/have-fun-with-machine-learning": {
+      "tokens": 1193,
+      "files_processed": 1
+    },
+    "bigscience-workshop/petals": {
+      "tokens": 96390,
+      "files_processed": 84
+    },
+    "DistrictDataLabs/yellowbrick": {
+      "tokens": 374744,
+      "files_processed": 195
+    },
+    "pyro-ppl/pyro": {
+      "tokens": 1201731,
+      "files_processed": 601
+    },
+    "marqo-ai/marqo": {
+      "tokens": 1212933,
+      "files_processed": 526
+    },
+    "Trusted-AI/adversarial-robustness-toolbox": {
+      "tokens": 1330371,
+      "files_processed": 567
+    },
+    "zuruoke/watermark-removal": {
+      "tokens": 11357,
+      "files_processed": 6
+    },
+    "horovod/horovod": {
+      "tokens": 611642,
+      "files_processed": 247
+    },
+    "SmirkCao/Lihang": {
+      "tokens": 40678,
+      "files_processed": 35
+    },
+    "lyst/lightfm": {
+      "tokens": 34289,
+      "files_processed": 22
+    },
+    "Lightning-AI/pytorch-lightning": {
+      "tokens": 1192711,
+      "files_processed": 601
+    },
+    "tensorflow/datasets": {
+      "tokens": 1544788,
+      "files_processed": 1647
+    },
+    "ludwig-ai/ludwig": {
+      "tokens": 1153481,
+      "files_processed": 624
+    },
+    "amazon-science/chronos-forecasting": {
+      "tokens": 80136,
+      "files_processed": 25
+    },
+    "eriklindernoren/ML-From-Scratch": {
+      "tokens": 59033,
+      "files_processed": 81
+    },
+    "jonaswinkler/paperless-ng": {
+      "tokens": 134766,
+      "files_processed": 152
+    },
+    "gradio-app/gradio": {
+      "tokens": 1147411,
+      "files_processed": 693
+    },
+    "paperless-ngx/paperless-ngx": {
+      "tokens": 532157,
+      "files_processed": 339
+    },
+    "lazyprogrammer/machine_learning_examples": {
+      "tokens": 444447,
+      "files_processed": 428
+    },
+    "kyegomez/swarms": {
+      "tokens": 1113598,
+      "files_processed": 705
+    },
+    "strands-agents/sdk-python": {
+      "tokens": 503417,
+      "files_processed": 231
+    },
+    "explosion/spaCy": {
+      "tokens": 1264911,
+      "files_processed": 788
+    },
+    "thtrieu/darkflow": {
+      "tokens": 29945,
+      "files_processed": 34
+    },
+    "huggingface/speech-to-speech": {
+      "tokens": 22594,
+      "files_processed": 37
+    },
+    "jessevig/bertviz": {
+      "tokens": 126929,
+      "files_processed": 26
+    },
+    "Olow304/memvid": {
+      "tokens": 40957,
+      "files_processed": 26
+    },
+    "Hironsan/BossSensor": {
+      "tokens": 2716,
+      "files_processed": 4
+    },
+    "iperov/DeepFaceLive": {
+      "tokens": 294323,
+      "files_processed": 305
+    },
+    "d2l-ai/d2l-en": {
+      "tokens": 111713,
+      "files_processed": 9
+    },
+    "CVHub520/X-AnyLabeling": {
+      "tokens": 1707290,
+      "files_processed": 336
+    },
+    "deepfakes/faceswap": {
+      "tokens": 770022,
+      "files_processed": 241
+    },
+    "marimo-team/marimo": {
+      "tokens": 1955207,
+      "files_processed": 1613
+    },
+    "sktime/sktime": {
+      "tokens": 2787830,
+      "files_processed": 1469
+    },
+    "keras-team/keras": {
+      "tokens": 2264444,
+      "files_processed": 908
+    },
+    "NicolasHug/Surprise": {
+      "tokens": 59414,
+      "files_processed": 61
+    },
+    "activeloopai/deeplake": {
+      "tokens": 70416,
+      "files_processed": 51
+    },
+    "scikit-learn-contrib/imbalanced-learn": {
+      "tokens": 236357,
+      "files_processed": 131
+    },
+    "microsoft/nni": {
+      "tokens": 1277255,
+      "files_processed": 844
+    },
+    "amdegroot/ssd.pytorch": {
+      "tokens": 22534,
+      "files_processed": 19
+    },
+    "neuml/txtai": {
+      "tokens": 260635,
+      "files_processed": 332
+    },
+    "optuna/optuna": {
+      "tokens": 577795,
+      "files_processed": 355
+    },
+    "iterative/dvc": {
+      "tokens": 677098,
+      "files_processed": 510
+    },
+    "Netflix/metaflow": {
+      "tokens": 1022039,
+      "files_processed": 531
+    },
+    "alirezamika/autoscraper": {
+      "tokens": 8848,
+      "files_processed": 10
+    },
+    "IDSIA/sacred": {
+      "tokens": 134654,
+      "files_processed": 115
+    },
+    "donnemartin/awesome-aws": {
+      "tokens": 4802,
+      "files_processed": 13
+    },
+    "rushter/data-science-blogs": {
+      "tokens": 465,
+      "files_processed": 2
+    },
+    "TarrySingh/Artificial-Intelligence-Deep-Learning-Machine-Learning-Tutorials": {
+      "tokens": 0,
+      "files_processed": 0
+    },
+    "apache/tvm": {
+      "tokens": 4825960,
+      "files_processed": 1528
+    },
+    "bentoml/BentoML": {
+      "tokens": 587252,
+      "files_processed": 371
+    },
+    "uber/causalml": {
+      "tokens": 154851,
+      "files_processed": 70
+    },
+    "lukas-blecher/LaTeX-OCR": {
+      "tokens": 282697,
+      "files_processed": 36
+    },
+    "drivendataorg/cookiecutter-data-science": {
+      "tokens": 10829,
+      "files_processed": 20
+    },
+    "apache/airflow": {
+      "tokens": 9785707,
+      "files_processed": 6314
+    },
+    "ageitgey/face_recognition": {
+      "tokens": 28946,
+      "files_processed": 30
+    },
+    "voxel51/fiftyone": {
+      "tokens": 1861420,
+      "files_processed": 472
+    },
+    "zalandoresearch/fashion-mnist": {
+      "tokens": 5537,
+      "files_processed": 8
+    },
+    "spotify/basic-pitch": {
+      "tokens": 61311,
+      "files_processed": 39
+    },
+    "skypilot-org/skypilot": {
+      "tokens": 2218548,
+      "files_processed": 732
+    },
+    "rasbt/mlxtend": {
+      "tokens": 263644,
+      "files_processed": 210
+    },
+    "LibrePhotos/librephotos": {
+      "tokens": 277457,
+      "files_processed": 279
+    },
+    "roboflow/supervision": {
+      "tokens": 329189,
+      "files_processed": 120
+    },
+    "wb14123/seq2seq-couplet": {
+      "tokens": 7319,
+      "files_processed": 8
+    },
+    "yzhao062/anomaly-detection-resources": {
+      "tokens": 729,
+      "files_processed": 2
+    },
+    "obss/sahi": {
+      "tokens": 165816,
+      "files_processed": 122
+    },
+    "hudson-and-thames/mlfinlab": {
+      "tokens": 85761,
+      "files_processed": 95
+    },
+    "likedan/Awesome-CoreML-Models": {
+      "tokens": 1337,
+      "files_processed": 1
+    },
+    "lmcinnes/umap": {
+      "tokens": 123657,
+      "files_processed": 44
+    },
+    "MorvanZhou/Tensorflow-Tutorial": {
+      "tokens": 17965,
+      "files_processed": 22
+    },
+    "keras-rl/keras-rl": {
+      "tokens": 50946,
+      "files_processed": 43
+    },
+    "argilla-io/argilla": {
+      "tokens": 1082943,
+      "files_processed": 951
+    },
+    "google-deepmind/learning-to-learn": {
+      "tokens": 16936,
+      "files_processed": 12
+    },
+    "SerpentAI/SerpentAI": {
+      "tokens": 87509,
+      "files_processed": 86
+    },
+    "microsoft/qlib": {
+      "tokens": 602749,
+      "files_processed": 319
+    },
+    "snorkel-team/snorkel": {
+      "tokens": 113905,
+      "files_processed": 123
+    },
+    "keras-team/autokeras": {
+      "tokens": 104965,
+      "files_processed": 125
+    },
+    "pytorch/pytorch": {
+      "tokens": 18837221,
+      "files_processed": 4007
+    },
+    "recommenders-team/recommenders": {
+      "tokens": 352649,
+      "files_processed": 216
+    },
+    "aimhubio/aim": {
+      "tokens": 269584,
+      "files_processed": 293
+    },
+    "google/trax": {
+      "tokens": 661575,
+      "files_processed": 198
+    },
+    "huggingface/datasets": {
+      "tokens": 694848,
+      "files_processed": 185
+    },
+    "iperov/DeepFaceLab": {
+      "tokens": 215827,
+      "files_processed": 133
+    },
+    "aladdinpersson/Machine-Learning-Collection": {
+      "tokens": 183911,
+      "files_processed": 251
+    },
+    "PeterL1n/BackgroundMattingV2": {
+      "tokens": 24402,
+      "files_processed": 23
+    },
+    "mlflow/mlflow": {
+      "tokens": 4220588,
+      "files_processed": 1793
+    },
+    "d2l-ai/d2l-zh": {
+      "tokens": 118140,
+      "files_processed": 14
+    },
+    "awslabs/gluonts": {
+      "tokens": 1327097,
+      "files_processed": 995
+    },
+    "ultralytics/yolov5": {
+      "tokens": 204281,
+      "files_processed": 51
+    },
+    "google-deepmind/pysc2": {
+      "tokens": 223826,
+      "files_processed": 131
+    },
+    "DLR-RM/stable-baselines3": {
+      "tokens": 221669,
+      "files_processed": 94
+    },
+    "RasaHQ/rasa": {
+      "tokens": 1233048,
+      "files_processed": 506
+    },
+    "chiphuyen/stanford-tensorflow-tutorials": {
+      "tokens": 80363,
+      "files_processed": 82
+    },
+    "yanshengjia/ml-road": {
+      "tokens": 4078,
+      "files_processed": 2
+    },
+    "tensorflow/tensor2tensor": {
+      "tokens": 1249086,
+      "files_processed": 453
+    },
+    "mikel-brostrom/boxmot": {
+      "tokens": 218065,
+      "files_processed": 126
+    },
+    "mangiucugna/json_repair": {
+      "tokens": 31832,
+      "files_processed": 26
+    },
+    "feast-dev/feast": {
+      "tokens": 1037097,
+      "files_processed": 654
+    },
+    "ultralytics/yolov3": {
+      "tokens": 200415,
+      "files_processed": 51
+    },
+    "gunthercox/ChatterBot": {
+      "tokens": 112131,
+      "files_processed": 138
+    },
+    "kelvins/awesome-mlops": {
+      "tokens": 113,
+      "files_processed": 1
+    },
+    "Jack-Cherish/Machine-Learning": {
+      "tokens": 57770,
+      "files_processed": 27
+    },
+    "online-ml/river": {
+      "tokens": 536033,
+      "files_processed": 471
+    },
+    "instillai/machine-learning-course": {
+      "tokens": 23312,
+      "files_processed": 37
+    },
+    "stanfordnlp/stanza": {
+      "tokens": 959069,
+      "files_processed": 488
+    },
+    "deepspeedai/DeepSpeed": {
+      "tokens": 1314472,
+      "files_processed": 928
+    },
+    "KevinMusgrave/pytorch-metric-learning": {
+      "tokens": 158002,
+      "files_processed": 198
+    },
+    "huggingface/autotrain-advanced": {
+      "tokens": 169030,
+      "files_processed": 111
+    },
+    "jackzhenguo/python-small-examples": {
+      "tokens": 471,
+      "files_processed": 2
+    },
+    "dmlc/gluon-cv": {
+      "tokens": 1502053,
+      "files_processed": 595
+    },
+    "datawhalechina/fun-rec": {
+      "tokens": 159206,
+      "files_processed": 99
+    },
+    "JaidedAI/EasyOCR": {
+      "tokens": 186946,
+      "files_processed": 72
+    },
+    "tyiannak/pyAudioAnalysis": {
+      "tokens": 49063,
+      "files_processed": 18
+    },
+    "HIT-SCIR/ltp": {
+      "tokens": 63565,
+      "files_processed": 76
+    },
+    "arc53/DocsGPT": {
+      "tokens": 241248,
+      "files_processed": 206
+    },
+    "chainer/chainer": {
+      "tokens": 1773993,
+      "files_processed": 1094
+    },
+    "aleju/imgaug": {
+      "tokens": 1552478,
+      "files_processed": 147
+    },
+    "jindongwang/transferlearning": {
+      "tokens": 373622,
+      "files_processed": 269
+    },
+    "pytorch/ignite": {
+      "tokens": 705223,
+      "files_processed": 329
+    },
+    "autogluon/autogluon": {
+      "tokens": 1607898,
+      "files_processed": 816
+    },
+    "triton-inference-server/server": {
+      "tokens": 746463,
+      "files_processed": 379
+    },
+    "donnemartin/data-science-ipython-notebooks": {
+      "tokens": 56938,
+      "files_processed": 38
+    },
+    "srbhr/Resume-Matcher": {
+      "tokens": 26703,
+      "files_processed": 55
+    },
+    "labmlai/annotated_deep_learning_paper_implementations": {
+      "tokens": 350647,
+      "files_processed": 223
+    },
+    "salesforce/Merlion": {
+      "tokens": 314359,
+      "files_processed": 204
+    },
+    "google-deepmind/dm_control": {
+      "tokens": 556548,
+      "files_processed": 337
+    },
+    "snipsco/snips-nlu": {
+      "tokens": 189947,
+      "files_processed": 119
+    },
+    "ydataai/ydata-profiling": {
+      "tokens": 247705,
+      "files_processed": 278
+    },
+    "SkalskiP/courses": {
+      "tokens": 860,
+      "files_processed": 1
+    },
+    "LAION-AI/Open-Assistant": {
+      "tokens": 433593,
+      "files_processed": 339
+    },
+    "unit8co/darts": {
+      "tokens": 1206107,
+      "files_processed": 246
+    },
+    "piskvorky/gensim": {
+      "tokens": 626556,
+      "files_processed": 182
+    },
+    "roboflow/rf-detr": {
+      "tokens": 105870,
+      "files_processed": 44
+    },
+    "tensorpack/tensorpack": {
+      "tokens": 375807,
+      "files_processed": 238
+    },
+    "FederatedAI/FATE": {
+      "tokens": 632072,
+      "files_processed": 578
+    },
+    "pytorch/vision": {
+      "tokens": 1088830,
+      "files_processed": 355
+    },
+    "xorbitsai/inference": {
+      "tokens": 1719005,
+      "files_processed": 824
+    },
+    "vwxyzjn/cleanrl": {
+      "tokens": 166226,
+      "files_processed": 79
+    },
+    "ThoughtfulDev/EagleEye": {
+      "tokens": 6984,
+      "files_processed": 9
+    },
+    "apple/coremltools": {
+      "tokens": 2736293,
+      "files_processed": 781
+    },
+    "MaartenGr/BERTopic": {
+      "tokens": 118229,
+      "files_processed": 80
+    },
+    "deeppavlov/DeepPavlov": {
+      "tokens": 257538,
+      "files_processed": 183
+    },
+    "stas00/ml-engineering": {
+      "tokens": 47366,
+      "files_processed": 36
+    },
+    "mdbloice/Augmentor": {
+      "tokens": 61875,
+      "files_processed": 25
+    },
+    "scikit-learn/scikit-learn": {
+      "tokens": 3668953,
+      "files_processed": 927
+    },
+    "MingchaoZhu/DeepLearning": {
+      "tokens": 39094,
+      "files_processed": 10
+    },
+    "kedro-org/kedro": {
+      "tokens": 280682,
+      "files_processed": 143
+    },
+    "rushter/MLAlgorithms": {
+      "tokens": 37049,
+      "files_processed": 71
+    },
+    "sktime/pytorch-forecasting": {
+      "tokens": 296884,
+      "files_processed": 198
+    },
+    "biolab/orange3": {
+      "tokens": 1906020,
+      "files_processed": 707
+    },
+    "CarperAI/trlx": {
+      "tokens": 146746,
+      "files_processed": 83
+    },
+    "wiseodd/generative-models": {
+      "tokens": 51723,
+      "files_processed": 50
+    },
+    "wandb/wandb": {
+      "tokens": 2532022,
+      "files_processed": 1365
+    },
+    "astorfi/TensorFlow-World": {
+      "tokens": 21572,
+      "files_processed": 19
+    },
+    "promptslab/Awesome-Prompt-Engineering": {
+      "tokens": 109,
+      "files_processed": 1
+    },
+    "lanpa/tensorboardX": {
+      "tokens": 77982,
+      "files_processed": 83
+    },
+    "onnx/onnx": {
+      "tokens": 865072,
+      "files_processed": 524
+    },
+    "nltk/nltk": {
+      "tokens": 1170813,
+      "files_processed": 359
+    },
+    "jina-ai/serve": {
+      "tokens": 638785,
+      "files_processed": 479
+    },
+    "mage-ai/mage-ai": {
+      "tokens": 1877695,
+      "files_processed": 1805
+    },
+    "kubeflow/pipelines": {
+      "tokens": 1522742,
+      "files_processed": 1330
+    },
+    "Nixtla/statsforecast": {
+      "tokens": 227815,
+      "files_processed": 92
+    },
+    "truefoundry/cognita": {
+      "tokens": 69149,
+      "files_processed": 69
+    },
+    "doccano/doccano": {
+      "tokens": 115729,
+      "files_processed": 261
+    },
+    "huggingface/transformers": {
+      "tokens": 14939214,
+      "files_processed": 3422
+    },
+    "clips/pattern": {
+      "tokens": 447312,
+      "files_processed": 120
+    },
+    "ddbourgin/numpy-ml": {
+      "tokens": 286781,
+      "files_processed": 98
+    },
+    "awslabs/agent-squad": {
+      "tokens": 126267,
+      "files_processed": 90
+    },
+    "MorvanZhou/tutorials": {
+      "tokens": 50258,
+      "files_processed": 115
+    },
+    "KaiyangZhou/deep-person-reid": {
+      "tokens": 159514,
+      "files_processed": 105
+    },
+    "flairNLP/flair": {
+      "tokens": 472883,
+      "files_processed": 132
+    },
+    "Zeyi-Lin/HivisionIDPhotos": {
+      "tokens": 60043,
+      "files_processed": 38
+    },
+    "google-deepmind/sonnet": {
+      "tokens": 200294,
+      "files_processed": 140
+    },
+    "OlafenwaMoses/ImageAI": {
+      "tokens": 190660,
+      "files_processed": 109
+    },
+    "FedML-AI/FedML": {
+      "tokens": 1855433,
+      "files_processed": 1408
+    },
+    "OpenBB-finance/OpenBB": {
+      "tokens": 1467534,
+      "files_processed": 1228
+    },
+    "kornia/kornia": {
+      "tokens": 1589114,
+      "files_processed": 730
+    },
+    "nerfstudio-project/nerfstudio": {
+      "tokens": 466772,
+      "files_processed": 231
+    },
+    "yzhao062/pyod": {
+      "tokens": 260353,
+      "files_processed": 172
+    },
+    "vaexio/vaex": {
+      "tokens": 898197,
+      "files_processed": 415
+    },
+    "hindupuravinash/the-gan-zoo": {
+      "tokens": 658,
+      "files_processed": 1
+    },
+    "deepchecks/deepchecks": {
+      "tokens": 845533,
+      "files_processed": 582
+    },
+    "Kiln-AI/Kiln": {
+      "tokens": 852162,
+      "files_processed": 290
+    },
+    "bbfamily/abu": {
+      "tokens": 643281,
+      "files_processed": 247
+    },
+    "aymericdamien/TopDeepLearning": {
+      "tokens": 1210,
+      "files_processed": 1
+    },
+    "microsoft/nlp-recipes": {
+      "tokens": 225191,
+      "files_processed": 139
+    },
+    "FMInference/FlexLLMGen": {
+      "tokens": 9328299,
+      "files_processed": 2137
+    },
+    "polakowo/vectorbt": {
+      "tokens": 813169,
+      "files_processed": 103
+    },
+    "serengil/deepface": {
+      "tokens": 124468,
+      "files_processed": 68
+    },
+    "mosaicml/composer": {
+      "tokens": 753607,
+      "files_processed": 392
+    },
+    "albumentations-team/albumentations": {
+      "tokens": 629428,
+      "files_processed": 93
+    },
+    "sebastianruder/NLP-progress": {
+      "tokens": 3236,
+      "files_processed": 1
+    },
+    "zenml-io/zenml": {
+      "tokens": 2444116,
+      "files_processed": 2060
+    },
+    "idealo/image-super-resolution": {
+      "tokens": 32940,
+      "files_processed": 28
+    },
+    "alteryx/featuretools": {
+      "tokens": 435638,
+      "files_processed": 407
+    },
+    "streamlit/streamlit": {
+      "tokens": 1863741,
+      "files_processed": 994
+    },
+    "bitsandbytes-foundation/bitsandbytes": {
+      "tokens": 195168,
+      "files_processed": 79
+    },
+    "Yorko/mlcourse.ai": {
+      "tokens": 5204,
+      "files_processed": 9
+    },
+    "tflearn/tflearn": {
+      "tokens": 177715,
+      "files_processed": 110
+    },
+    "PeterL1n/RobustVideoMatting": {
+      "tokens": 33085,
+      "files_processed": 28
+    },
+    "ray-project/ray": {
+      "tokens": 8075030,
+      "files_processed": 3886
+    },
+    "okfn-brasil/serenata-de-amor": {
+      "tokens": 101730,
+      "files_processed": 173
+    },
+    "MorvanZhou/Reinforcement-learning-with-tensorflow": {
+      "tokens": 81132,
+      "files_processed": 56
+    },
+    "jacobgil/pytorch-grad-cam": {
+      "tokens": 25357,
+      "files_processed": 41
+    },
+    "wzhe06/Ad-papers": {
+      "tokens": 500,
+      "files_processed": 1
+    },
+    "adap/flower": {
+      "tokens": 1202051,
+      "files_processed": 1118
+    },
+    "py-why/dowhy": {
+      "tokens": 465718,
+      "files_processed": 232
+    },
+    "ultralytics/ultralytics": {
+      "tokens": 658506,
+      "files_processed": 190
+    },
+    "nateraw/stable-diffusion-videos": {
+      "tokens": 29040,
+      "files_processed": 11
+    },
+    "ourownstory/neural_prophet": {
+      "tokens": 202031,
+      "files_processed": 67
+    },
+    "modelscope/modelscope": {
+      "tokens": 5326912,
+      "files_processed": 3150
+    },
+    "clearml/clearml": {
+      "tokens": 1939577,
+      "files_processed": 375
+    }
+  }
+}
