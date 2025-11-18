@@ -86,8 +86,8 @@ class GitHubSearcher:
                 if len(results) >= target: break
             if len(results) >= target: break
         
-        json.dump(results, open(self.output, 'w'), indent=2)
-        json.dump(list(self.seen), open(self.seen_file, 'w'))
+        json.dump(results, open(self.output, 'a'), indent=2)
+        json.dump(list(self.seen), open(self.seen_file, 'a'))
         
         print("\n" + "="*90)
         print(f"✅ Search Complete!")
