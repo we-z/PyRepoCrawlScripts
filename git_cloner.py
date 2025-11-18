@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Git Cloner - Clones repos from repos_to_clone.json and purges non-code files"""
-import sys, json, shutil, subprocess
+import json, shutil, subprocess
 from pathlib import Path
-
-KEEP_EXT = {'.py'}
 
 
 class GitCloner:
@@ -30,18 +28,35 @@ class GitCloner:
         except: return False
     
     def purge(self, path: Path):
-        stats = [0, 0]  # files, bytes
+        files_deleted = 0
+        bytes_freed = 0
+        
+        # Delete all files that are not .py files (skip .git directory entirely)
         for f in path.rglob('*'):
-            if f.is_file() and '.git' not in f.parts and f.suffix.lower() not in KEEP_EXT and f.suffix != '':
-                # Also purge large .txt (>1MB) and .json (>5MB)
-                size = f.stat().st_size
-                if (f.suffix == '.txt' and size > 1024*1024) or (f.suffix == '.json' and size > 5*1024*1024):
-                    try: f.unlink(); stats[0] += 1; stats[1] += size
-                    except: pass
-                elif f.suffix.lower() not in KEEP_EXT:
-                    try: f.unlink(); stats[0] += 1; stats[1] += size
-                    except: pass
-        return stats
+            if f.is_file() and '.git' not in f.parts:
+                if f.suffix.lower() != '.py':
+                    try:
+                        size = f.stat().st_size
+                        f.unlink()
+                        files_deleted += 1
+                        bytes_freed += size
+                    except (OSError, PermissionError):
+                        pass
+        
+        # Delete empty directories (excluding .git and the root path itself)
+        dirs_deleted = 0
+        dirs = [d for d in path.rglob('*') if d.is_dir() and '.git' not in d.parts and d != path]
+        # Sort by depth descending (deepest first) to handle nested empty dirs
+        dirs.sort(key=lambda d: len(d.parts), reverse=True)
+        for d in dirs:
+            try:
+                if not any(d.iterdir()):
+                    d.rmdir()
+                    dirs_deleted += 1
+            except (OSError, PermissionError):
+                pass
+        
+        return [files_deleted, bytes_freed, dirs_deleted]
     
     def run(self):
         input_file = self.repos_dir.parent / "repos_to_clone.json"
@@ -62,8 +77,12 @@ class GitCloner:
             
             if self.clone(repo['clone_url'], repo['full_name']):
                 print(f"✅ CLONED")
-                files, bytes_freed = self.purge(self.repos_dir / repo['full_name'].replace("/", "_"))
-                if files > 0: print(f"   🗑️  Purged: {files:,} files, {bytes_freed / 1024**2:.1f} MB")
+                files, bytes_freed, dirs_deleted = self.purge(self.repos_dir / repo['full_name'].replace("/", "_"))
+                if files > 0 or dirs_deleted > 0:
+                    msg = f"   🗑️  Purged: {files:,} files, {bytes_freed / 1024**2:.1f} MB"
+                    if dirs_deleted > 0:
+                        msg += f" | {dirs_deleted:,} empty dirs"
+                    print(msg)
                 self.cloned.add(repo['full_name'])
                 cloned += 1
                 if cloned % 10 == 0: json.dump(list(self.cloned), open(self.cloned_file, 'w'))
