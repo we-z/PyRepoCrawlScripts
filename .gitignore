@@ -6,6 +6,7 @@ logs/
 data/
 repos_to_clone.json
 repos_cloned.json
+temp_clones/
 
 # Environment variables
 .env
