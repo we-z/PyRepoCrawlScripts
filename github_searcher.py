@@ -48,7 +48,7 @@ class GitHubSearcher:
             print(f" | New: {new:>3} | Total: {len(results):>6,} ({pct:>5.1f}%)")
             if len(results) >= target: return True
         return False
-    def run(self, target: int = 50000):
+    def run(self, target):
         already_have = len(self.cloned)
         print("="*90 + f"\n🔍 GitHub ML/DL Repository Searcher\n"
               f"Target: {target:,} new repos | Already have: {already_have:,} "
@@ -98,4 +98,4 @@ if __name__ == "__main__":
     load_dotenv()
     token = os.environ.get('GITHUB_TOKEN')
     if not token: sys.exit("ERROR: GITHUB_TOKEN not found!")
-    GitHubSearcher(token).run(50000)
+    GitHubSearcher(token).run(500000)

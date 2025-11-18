@@ -53,7 +53,7 @@ def main():
     print("=" * (progress_width + 7 + repo_width + stats_width + total_width + 8))
 
     results, total_tokens, total_files = {}, 0, 0
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {executor.submit(count_repo_tokens, repo_dir): repo_dir for repo_dir in repo_dirs}
         for i, future in enumerate(as_completed(futures), 1):
             repo_dir = futures[future]
