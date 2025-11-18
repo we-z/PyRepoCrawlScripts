@@ -45,7 +45,12 @@ class GitHubSearcher:
                   "recurrent-neural-network", "lstm", "gru", "attention-mechanism", "bert", 
                   "gpt", "stable-diffusion", "yolo", "resnet", "vgg", "image-classification",
                   "semantic-segmentation", "instance-segmentation", "face-recognition", 
-                  "speech-recognition", "audio-processing", "time-series", "forecasting"]
+                  "speech-recognition", "audio-processing", "time-series", "forecasting",
+                  "anomaly-detection", "recommendation-system", "embeddings", "transfer-learning",
+                  "few-shot-learning", "zero-shot-learning", "graph-neural-network", "gnn",
+                  "vision-transformer", "clip", "whisper", "chatbot", "text-generation",
+                  "sentiment-analysis", "named-entity-recognition", "question-answering",
+                  "summarization", "translation", "ocr", "pose-estimation", "tracking"]
         
         query_num = 0
         for topic in topics:
