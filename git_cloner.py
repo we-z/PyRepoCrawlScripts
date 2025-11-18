@@ -3,13 +3,7 @@
 import sys, json, shutil, subprocess
 from pathlib import Path
 
-KEEP_EXT = {'.py', '.pyx', '.pyi', '.pyw', '.ipynb',
-        '.js', '.ts', '.jsx', '.tsx', '.java', '.cpp', '.c', '.h', '.hpp', '.cs', 
-        '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.jl',
-        '.sh', '.bash', '.zsh', '.fish', '.md', '.rst', '.txt',
-        '.json', '.yaml', '.yml', '.toml', '.xml', '.cfg', '.ini', '.conf','.csv', '.tsv',
-        '.html', '.css', '.scss', '.sass', '.less', '.lock', '.requirements',
-        '.gitignore', '.gitattributes', '.editorconfig', '.env'}
+KEEP_EXT = {'.py'}
 
 
 class GitCloner:
