@@ -17,7 +17,7 @@ class GitHubScraper:
             url = f"https://github.com/search?q={q.replace(' ', '+')}&type=repositories&s={sort}&o=desc&p={page}"
             print(f"\n  URL: {url}")
             r = requests.get(url, headers=self.headers, timeout=30)
-            if r.status_code == 429: time.sleep(60); return self.search(q, page, sort)
+            if r.status_code == 429: print(f"  ⚠️  Rate limit hit. Waiting 60 seconds..."); time.sleep(60); return self.search(q, page, sort);
             if r.status_code != 200: return []
             repos, seen_names = [], set()
             repo_matches = list(re.finditer(r'<div[^>]*search-title[^>]*>.*?href="/([^/]+/[^/"]+)"', r.text, re.DOTALL))
