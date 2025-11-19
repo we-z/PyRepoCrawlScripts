@@ -1,7 +1,6 @@
 import os, sys, json, time, requests, re
 from pathlib import Path
 from topics import TOPICS
-
 class GitHubScraper:
     def __init__(self):
         self.headers = {"User-Agent": "Mozilla/5.0"}
@@ -20,16 +19,27 @@ class GitHubScraper:
             r = requests.get(url, headers=self.headers, timeout=30)
             if r.status_code == 429: time.sleep(60); return self.search(q, page, sort)
             if r.status_code != 200: return []
-            repos = []
-            seen_names = set()
-            for match in re.finditer(r'href="/([^/]+/[^/"]+)"[^>]*>.*?<span[^>]*>(\d+[,\d]*)\s+stars', r.text, re.DOTALL):
+            repos, seen_names = [], set()
+            repo_matches = list(re.finditer(r'<div[^>]*search-title[^>]*>.*?href="/([^/]+/[^/"]+)"', r.text, re.DOTALL))
+            print(f"  Found {len(repo_matches)} repo matches")
+            for match in repo_matches:
                 name = match.group(1)
-                if name not in seen_names:
+                if name in seen_names or name.count('/') != 1: continue
+                context = r.text[max(0, match.start()-200):min(len(r.text), match.end()+3000)]
+                stars = 0
+                aria_match = re.search(r'aria-label="(\d+)\s+stars"', context)
+                if aria_match:
+                    stars = int(aria_match.group(1))
+                else:
+                    star_match = re.search(r'href="/[^"]+/stargazers"[^>]*>.*?<span[^>]*>([\d.]+[kmKM]?)</span>', context, re.DOTALL)
+                    if star_match:
+                        s = star_match.group(1).lower()
+                        stars = int(float(s.replace('k', '')) * 1000) if 'k' in s else int(float(s.replace('m', '')) * 1000000) if 'm' in s else int(float(s))
+                if stars > 0 and not any(x in name for x in ['solutions', 'resources', 'topics', 'sponsors']):
                     seen_names.add(name)
-                    repos.append({"full_name": name, "clone_url": f"https://github.com/{name}.git", 
-                                 "stars": int(match.group(2).replace(',', ''))})
+                    repos.append({"full_name": name, "clone_url": f"https://github.com/{name}.git", "stars": stars})
             return repos[:10]
-        except: return []
+        except Exception as e: print(f"  ⚠️  Exception: {e}"); return []
     def process_query(self, query: str, sort: str, max_pages: int, target: int, results: list, query_num: int) -> bool:
         for page in range(1, max_pages + 1):
             print(f"Query {query_num:>4}: {query[:55]:55s} | Sort: {sort:8s} | Page: {page}", end='', flush=True)
@@ -51,7 +61,7 @@ class GitHubScraper:
         print("="*90 + f"\n🔍 GitHub ML/DL Repository Scraper\n"
               f"Target: {target:,} new repos | Already have: {already_have:,} cloned repos\n" + "="*90 + "\n")
         results, query_num = [], 0
-        stars_ranges = ["10000..", "5000..9999", "2000..4999", "1000..1999", "500..999", "200..499", "100..199", "50..99", "20..49", "10..19", "5..9", "1..4"]
+        stars_ranges = [">=10000", "5000..9999", "2000..4999", "1000..1999", "500..999", "200..499", "100..199", "50..99", "20..49", "10..19", "5..9", "1..4"]
         sorts = ["stars", "updated", "forks"]
         for topic in TOPICS:
             for stars in stars_ranges:
@@ -84,6 +94,5 @@ class GitHubScraper:
         print(f"\n{'='*90}\n✅ Search Complete!\n   New unique repos found: {len(new_results):,}\n"
               f"   Already have cloned: {already_have:,}\n   Total after cloning: {already_have + len(new_results):,}\n"
               f"   Saved to: {self.output}\n{'='*90}")
-
 if __name__ == "__main__":
     GitHubScraper().run(500000)
