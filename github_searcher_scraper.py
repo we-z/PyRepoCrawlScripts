@@ -16,15 +16,19 @@ class GitHubScraper:
     def search(self, q: str, page: int, sort: str) -> list:
         try:
             url = f"https://github.com/search?q={q.replace(' ', '+')}&type=repositories&s={sort}&o=desc&p={page}"
+            print(f"\n  URL: {url}")
             r = requests.get(url, headers=self.headers, timeout=30)
             if r.status_code == 429: time.sleep(60); return self.search(q, page, sort)
             if r.status_code != 200: return []
             repos = []
+            seen_names = set()
             for match in re.finditer(r'href="/([^/]+/[^/"]+)"[^>]*>.*?<span[^>]*>(\d+[,\d]*)\s+stars', r.text, re.DOTALL):
                 name = match.group(1)
-                repos.append({"full_name": name, "clone_url": f"https://github.com/{name}.git", 
-                             "stars": int(match.group(2).replace(',', ''))})
-            return repos
+                if name not in seen_names:
+                    seen_names.add(name)
+                    repos.append({"full_name": name, "clone_url": f"https://github.com/{name}.git", 
+                                 "stars": int(match.group(2).replace(',', ''))})
+            return repos[:10]
         except: return []
     def process_query(self, query: str, sort: str, max_pages: int, target: int, results: list, query_num: int) -> bool:
         for page in range(1, max_pages + 1):
@@ -57,18 +61,18 @@ class GitHubScraper:
                               f'language:python "{topic}" in:description stars:{stars}']
                     for q in queries:
                         query_num += 1
-                        if self.process_query(q, sort, 10 if "topic:" in q else 5, target, results, query_num):
+                        if self.process_query(q, sort, 100, target, results, query_num):
                             return self._save(results, already_have)
         if len(results) < target:
-            extra_queries = [("filename:model.py", stars_ranges[:6], 3), ("filename:train.py", stars_ranges[:6], 3),
-                            ("pytorch", stars_ranges[:4], 3), ("tensorflow", stars_ranges[:4], 3),
-                            ('"neural network" OR "machine learning"', stars_ranges[:5], 3),
-                            ('"deep learning" OR "artificial intelligence"', stars_ranges[:5], 3)]
-            for base_q, star_list, max_p in extra_queries:
+            extra_queries = [("filename:model.py", stars_ranges[:6]), ("filename:train.py", stars_ranges[:6]),
+                            ("pytorch", stars_ranges[:4]), ("tensorflow", stars_ranges[:4]),
+                            ('"neural network" OR "machine learning"', stars_ranges[:5]),
+                            ('"deep learning" OR "artificial intelligence"', stars_ranges[:5])]
+            for base_q, star_list in extra_queries:
                 for stars in star_list:
                     for sort in sorts:
                         query_num += 1
-                        if self.process_query(f"language:python {base_q} stars:{stars}", sort, max_p, target, results, query_num):
+                        if self.process_query(f"language:python {base_q} stars:{stars}", sort, 100, target, results, query_num):
                             return self._save(results, already_have)
         return self._save(results, already_have)
     def _save(self, results: list, already_have: int):
