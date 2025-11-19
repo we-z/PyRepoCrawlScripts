@@ -51,7 +51,7 @@ class GitHubScraper:
                 if name not in self.seen and name not in self.cloned:
                     self.seen.add(name); results.append(r); new += 1
             print(f" | New: {new:>3} | Total: {len(results):>6,}")
-            time.sleep(2)
+            time.sleep(6)
     def run(self, target):
         already_have = len(self.cloned)
         print("="*90 + f"\n🔍 GitHub ML/DL Repository Scraper\n"

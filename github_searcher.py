@@ -8,15 +8,15 @@ class GitHubSearcher:
         self.headers = {"Authorization": f"token {token}"}
         base = Path(__file__).parent
         self.output = base / "repos_to_clone.json"
-        self.seen_file = base / "data" / "seen_repos.json"
-        self.seen_file.parent.mkdir(exist_ok=True)
+        data_dir = base / "data"
+        data_dir.mkdir(exist_ok=True)
+        self.seen_file = data_dir / "seen_repos.json"
+        self.queries_file = data_dir / "seen_queries.json"
         repos_dir = base / "cloned_repos"
         self.cloned = {d.name.replace("_", "/", 1) for d in repos_dir.iterdir() 
                       if d.is_dir()} if repos_dir.exists() else set()
-        self.seen = set()
-        if self.seen_file.exists():
-            try: self.seen = set(json.load(open(self.seen_file, 'r')))
-            except: pass
+        self.seen = set(json.load(open(self.seen_file, 'r'))) if self.seen_file.exists() else set()
+        self.seen_queries = set(json.load(open(self.queries_file, 'r'))) if self.queries_file.exists() else set()
     def search(self, q: str, page: int, sort: str) -> list:
         try:
             r = requests.get("https://api.github.com/search/repositories",
@@ -59,41 +59,38 @@ class GitHubSearcher:
         for topic in TOPICS:
             for stars in stars_ranges:
                 for sort in sorts:
-                    queries = [f"language:python topic:{topic} stars:{stars}",
+                    for q in [f"language:python topic:{topic} stars:{stars}",
                               f'language:python "{topic}" in:readme stars:{stars}',
-                              f'language:python "{topic}" in:description stars:{stars}']
-                    for q in queries:
+                              f'language:python "{topic}" in:description stars:{stars}']:
+                        query_key = f"{q}|{sort}"
+                        if query_key in self.seen_queries: continue
                         query_num += 1
-                        if self.process_query(q, sort, 10 if "topic:" in q else 5, target, results, query_num):
-                            return self._save(results, already_have)
+                        self.process_query(q, sort, 10, target, results, query_num)
+                        self.seen_queries.add(query_key)
+                        self._save(results, already_have)
+                        if len(results) >= target: return
         if len(results) < target:
-            extra_queries = [("filename:model.py", stars_ranges[:6], 3),
-                            ("filename:train.py", stars_ranges[:6], 3),
-                            ("pytorch", stars_ranges[:4], 3),
-                            ("tensorflow", stars_ranges[:4], 3),
-                            ('"neural network" OR "machine learning"', stars_ranges[:5], 3),
-                            ('"deep learning" OR "artificial intelligence"', stars_ranges[:5], 3)]
-            for base_q, star_list, max_p in extra_queries:
+            for base_q, star_list in [("filename:model.py", stars_ranges[:6]),
+                            ("filename:train.py", stars_ranges[:6]), ("pytorch", stars_ranges[:4]),
+                            ("tensorflow", stars_ranges[:4]), ('"neural network" OR "machine learning"', stars_ranges[:5]),
+                            ('"deep learning" OR "artificial intelligence"', stars_ranges[:5])]:
                 for stars in star_list:
                     for sort in sorts:
-                        query_num += 1
                         q = f"language:python {base_q} stars:{stars}"
-                        if self.process_query(q, sort, max_p, target, results, query_num):
-                            return self._save(results, already_have)
-        return self._save(results, already_have)
+                        query_key = f"{q}|{sort}"
+                        if query_key in self.seen_queries: continue
+                        query_num += 1
+                        self.process_query(q, sort, 10, target, results, query_num)
+                        self.seen_queries.add(query_key)
+                        self._save(results, already_have)
+                        if len(results) >= target: return
     def _save(self, results: list, already_have: int):
-        existing = []
-        if self.output.exists():
-            try: existing = json.load(open(self.output, 'r'))
-            except: pass
+        existing = json.load(open(self.output, 'r')) if self.output.exists() else []
         existing_names = {r.get('full_name') for r in existing}
         new_results = [r for r in results if r['full_name'] not in existing_names]
         json.dump(existing + new_results, open(self.output, 'w'), indent=2)
         json.dump(list(self.seen), open(self.seen_file, 'w'))
-        total = already_have + len(new_results)
-        print(f"\n{'='*90}\n✅ Search Complete!\n   New unique repos found: "
-              f"{len(new_results):,}\n   Already have cloned: {already_have:,}\n"
-              f"   Total after cloning: {total:,}\n   Saved to: {self.output}\n{'='*90}")
+        json.dump(list(self.seen_queries), open(self.queries_file, 'w'))
 if __name__ == "__main__":
     load_dotenv()
     token = os.environ.get('GITHUB_TOKEN')
