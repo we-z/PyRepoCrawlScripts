@@ -51,7 +51,7 @@ class GitHubScraper:
         print("="*90 + f"\n🔍 GitHub ML/DL Repository Scraper\n"
               f"Target: {target:,} new repos | Already have: {already_have:,} cloned repos\n" + "="*90 + "\n")
         results, query_num = [], 0
-        stars_ranges = [">=500", "200..499", "100..199", "50..99", "20..49", "10..19", "5..9", "1..4"]
+        stars_ranges = ["10000..", "5000..9999", "2000..4999", "1000..1999", "500..999", "200..499", "100..199", "50..99", "20..49", "10..19", "5..9", "1..4"]
         sorts = ["stars", "updated", "forks"]
         for topic in TOPICS:
             for stars in stars_ranges:
