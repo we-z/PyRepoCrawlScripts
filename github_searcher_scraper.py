@@ -69,16 +69,7 @@ class GitHubScraper:
                         self.process_query(q, sort, 100, results, query_num)
                         self.seen_queries.add(query_key); self._save(results, already_have)
                         if len(results) >= target: return
-        for base_q, star_list in [("filename:model.py", stars_ranges[:6]), ("filename:train.py", stars_ranges[:6]), ("pytorch", stars_ranges[:4]), ("tensorflow", stars_ranges[:4]), ('"neural network" OR "machine learning"', stars_ranges[:5]), ('"deep learning" OR "artificial intelligence"', stars_ranges[:5])]:
-            for stars in star_list:
-                for sort in sorts:
-                    q = f"language:python {base_q} stars:{stars}"
-                    query_key = f"{q}|{sort}"
-                    if query_key in self.seen_queries: continue
-                    query_num += 1
-                    self.process_query(q, sort, 100, results, query_num)
-                    self.seen_queries.add(query_key); self._save(results, already_have)
-                    if len(results) >= target: return
+
     def _save(self, results: list, already_have: int):
         existing = json.load(open(self.output, 'r')) if self.output.exists() else []
         existing_names = {r.get('full_name') for r in existing}
