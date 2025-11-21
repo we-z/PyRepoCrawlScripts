@@ -41,6 +41,7 @@ def main():
         print(f"❌ No '{REPOS_DIR.name}' directory found!")
         sys.exit(1)
 
+    print("Gathering list of repository directories...")
     repo_dirs = [d for d in REPOS_DIR.iterdir() if d.is_dir() and not d.name.startswith('.')]
     total_repos = len(repo_dirs)
     max_repo_name_len = min(max((len(d.name.replace("_", "/", 1)) for d in repo_dirs), default=30), 50)
@@ -53,7 +54,7 @@ def main():
     print("=" * (progress_width + 7 + repo_width + stats_width + total_width + 8))
 
     results, total_tokens, total_files = {}, 0, 0
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
         futures = {executor.submit(count_repo_tokens, repo_dir): repo_dir for repo_dir in repo_dirs}
         for i, future in enumerate(as_completed(futures), 1):
             repo_dir = futures[future]
