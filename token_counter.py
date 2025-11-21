@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Token Counter for cloned_repos/"""
 import sys
+import os
 import json
 from datetime import datetime
 from pathlib import Path
@@ -42,7 +43,7 @@ def main():
         sys.exit(1)
 
     print("Gathering list of repository directories...")
-    repo_dirs = [d for d in REPOS_DIR.iterdir() if d.is_dir() and not d.name.startswith('.')]
+    repo_dirs = [Path(e.path) for e in os.scandir(REPOS_DIR) if e.is_dir() and not e.name.startswith('.')]
     total_repos = len(repo_dirs)
     max_repo_name_len = min(max((len(d.name.replace("_", "/", 1)) for d in repo_dirs), default=30), 50)
     progress_width = len(f"[{total_repos:,}/{total_repos:,}]")
