@@ -7,7 +7,7 @@ from threading import Lock
 import time
 
 class GitCloner:
-    def __init__(self, max_workers: int = 8):
+    def __init__(self, max_workers: int = 16):
         base = Path(__file__).parent
         self.repos_dir, self.temp_dir = base / "cloned_repos", base / "temp_clones"
         self.repos_dir.mkdir(exist_ok=True); self.temp_dir.mkdir(exist_ok=True)

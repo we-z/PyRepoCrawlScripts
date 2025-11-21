@@ -49,9 +49,9 @@ class GitHubSearcher:
                 print(f" | No more results"); break
             new = 0
             for r in repos_found:
-                rid, name = str(r['id']), r['full_name']
-                if rid not in self.seen and name not in self.cloned:
-                    self.seen.add(rid)
+                name = r['full_name']
+                if name not in self.seen and name not in self.cloned:
+                    self.seen.add(name)
                     results.append({"full_name": name, "clone_url": r['clone_url'], "stars": r.get('stargazers_count', 0)})
                     new += 1
             pct = (len(results)/target)*100
