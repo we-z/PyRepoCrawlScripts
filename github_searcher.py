@@ -2,6 +2,7 @@ import os, sys, json, time, asyncio, aiohttp
 from pathlib import Path
 from dotenv import load_dotenv
 from topics import TOPICS
+from datetime import datetime
 
 RATE_LIMIT = 27 # API requests per minute
 
@@ -23,21 +24,25 @@ class GitHubSearcher:
                 now = time.time()
                 self.req_times = [t for t in self.req_times if now - t < 60]
                 if len(self.req_times) >= RATE_LIMIT:
+                    wait_time = 60 - (now - self.req_times[0]) + 1 if self.req_times else 1
                     wait = True
                 else:
                     self.req_times.append(now)
                     wait = False
             
             if wait:
-                await asyncio.sleep(1)
+                await asyncio.sleep(wait_time)
                 continue
 
             try:
-                async with session.get("https://api.github.com/search/repositories", params={"q": q, "page": page, "per_page": 100, "sort": sort}) as r:
-                    if r.status == 403:
+                async with session.get("https://api.github.com/search/repositories", 
+                                     params={"q": q, "page": page, "per_page": 100, "sort": sort},
+                                     timeout=aiohttp.ClientTimeout(total=30)) as r:
+                    if r.status == 403 or r.status == 429:
                         reset = int(r.headers.get('X-RateLimit-Reset', time.time() + 60))
-                        print(f"\n⚠️ RATE LIMIT HIT! Reset: {reset} (sleeping {max(reset - time.time(), 1):.0f}s)")
-                        await asyncio.sleep(max(reset - time.time() + 1, 10))
+                        sleep_time = max(reset - time.time(), 30)
+                        print(f"\n⚠️ RATE LIMIT HIT! Reset: {reset} (sleeping {sleep_time:.0f}s)")
+                        await asyncio.sleep(sleep_time)
                         continue
                     return (await r.json()).get('items', []) if r.status == 200 else []
             except: return []
@@ -56,7 +61,8 @@ class GitHubSearcher:
                 
                 pct = len(results) / target * 100
                 q_print = (q[:75] + '..') if len(q) > 75 else q
-                print(f"QPM: {len(self.req_times):>2} | {q_print:<77} | Sort: {sort:<7} | P{page:<2} | Found: {len(items):>3} | New: {len(new_items):>3} | Total: {len(results):>6,}/{target:,} ({pct:>6.2f}%)")
+                t_str = datetime.now().strftime("%H:%M:%S")
+                print(f"{t_str} | QPM: {len(self.req_times):>2} | {q_print:<77} | Sort: {sort:<7} | P{page:<2} | Found: {len(items):>3} | New: {len(new_items):>3} | Total: {len(results):>6,}/{target:,} ({pct:>6.2f}%)")
                 
                 if len(items) < 100: break
             self.seen_queries.add(f"{q}|{sort}")
