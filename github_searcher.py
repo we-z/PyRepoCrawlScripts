@@ -15,8 +15,10 @@ class GitHubSearcher:
         self.seen = set(json.load(open(self.seen_file)) if self.seen_file.exists() else [])
         self.cloned = {d.name.replace("_", "/", 1) for d in os.scandir(self.base/"cloned_repos") if d.is_dir()} if (self.base/"cloned_repos").exists() else set()
         self.seen_queries = set(json.load(open(self.queries_file)) if self.queries_file.exists() else [])
+        self.output = self.base / "repos_to_clone.json"
         self.req_times = []
         self.lock = None
+        self.save_lock = None
 
     async def search(self, session, q, page, sort):
         while True:
@@ -66,10 +68,23 @@ class GitHubSearcher:
                 
                 if len(items) < 100: break
             self.seen_queries.add(f"{q}|{sort}")
+            await self._save(results)
             queue.task_done()
+
+    async def _save(self, results):
+        async with self.save_lock:
+            def _save_sync():
+                existing = json.load(open(self.output, 'r')) if self.output.exists() else []
+                existing_names = {r.get('full_name') for r in existing}
+                new_results = [r for r in results if r['full_name'] not in existing_names]
+                json.dump(existing + new_results, open(self.output, 'w'), indent=2)
+                json.dump(list(self.seen), open(self.seen_file, 'w'))
+                json.dump(list(self.seen_queries), open(self.queries_file, 'w'))
+            await asyncio.to_thread(_save_sync)
 
     async def run(self, target):
         self.lock = asyncio.Lock()
+        self.save_lock = asyncio.Lock()
         results, queue, q_id = [], asyncio.Queue(), 0
         print(f"🔍 Starting search for {target:,} new repos...")
         for t in TOPICS:
@@ -81,9 +96,7 @@ class GitHubSearcher:
         async with aiohttp.ClientSession(headers=self.headers) as session:
             await asyncio.gather(*[self.worker(session, queue, results, target) for _ in range(5)])
         
-        existing = json.load(open(self.base/"repos_to_clone.json")) if (self.base/"repos_to_clone.json").exists() else []
-        json.dump(existing + results, open(self.base/"repos_to_clone.json", 'w'), indent=2)
-        json.dump(list(self.seen), open(self.seen_file, 'w')); json.dump(list(self.seen_queries), open(self.queries_file, 'w'))
+        await self._save(results)
         print(f"✅ Saved {len(results)} new repos.")
 
 if __name__ == "__main__":
