@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fast Token Counter for cloned_repos/"""
 import sys, os, json, time, tiktoken
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 REPOS_DIR = "cloned_repos"
 OUTPUT_FILE = "token_counts.json"
@@ -30,7 +30,7 @@ def count_repo(repo_path):
 
 def main():
     if not os.path.exists(REPOS_DIR): return print(f"❌ No '{REPOS_DIR}' found!")
-    repo_dirs = [os.path.join(REPOS_DIR, d) for d in os.listdir(REPOS_DIR) if os.path.isdir(os.path.join(REPOS_DIR, d)) and not d.startswith('.')]
+    repo_dirs = [e.path for e in os.scandir(REPOS_DIR) if e.is_dir() and not e.name.startswith('.')]
     total_repos = len(repo_dirs)
     print(f"📊 Processing {total_repos:,} repositories with 128 workers...")
     
@@ -39,24 +39,40 @@ def main():
     print("=" * 120)
 
     with ThreadPoolExecutor(max_workers=128) as exe:
-        futures = {exe.submit(count_repo, p): p for p in repo_dirs}
-        for i, f in enumerate(as_completed(futures), 1):
-            repo_path = futures[f]
-            name = os.path.basename(repo_path).replace("_", "/", 1)
+        futures = {}
+        repo_iter = iter(repo_dirs)
+        
+        def submit_next():
             try:
-                t, c = f.result()
-                results[name] = {"tokens": t, "files_processed": c}
-                total_tok += t
-                total_files += c
-                
-                elapsed = time.time() - start_time
-                rate = i / elapsed if elapsed > 0 else 0
-                prog = f"[{i:,}/{total_repos:,}]"
-                r_stats = f"{t:,} tok, {c:,} files"
-                t_stats = f"{total_tok:,} tok, {total_files:,} files"
-                print(f"{prog:<18} {rate:>6.1f}/s   {name[:38]:<40} {r_stats:<25} {t_stats:<25}")
-            except Exception as e:
-                print(f"Error {name}: {e}")
+                p = next(repo_iter)
+                futures[exe.submit(count_repo, p)] = p
+                return True
+            except StopIteration: return False
+
+        for _ in range(200): submit_next()
+
+        processed = 0
+        while futures:
+            done, _ = wait(futures, return_when=FIRST_COMPLETED)
+            for f in done:
+                repo_path = futures.pop(f)
+                processed += 1
+                name = os.path.basename(repo_path).replace("_", "/", 1)
+                try:
+                    t, c = f.result()
+                    results[name] = {"tokens": t, "files_processed": c}
+                    total_tok += t
+                    total_files += c
+                    
+                    elapsed = time.time() - start_time
+                    rate = processed / elapsed if elapsed > 0 else 0
+                    prog = f"[{processed:,}/{total_repos:,}]"
+                    r_stats = f"{t:,} tok, {c:,} files"
+                    t_stats = f"{total_tok:,} tok, {total_files:,} files"
+                    print(f"{prog:<18} {rate:>6.1f}/s   {name[:38]:<40} {r_stats:<25} {t_stats:<25}")
+                except Exception as e:
+                    print(f"Error {name}: {e}")
+                submit_next()
 
     with open(OUTPUT_FILE, 'w') as f:
         json.dump({"total_tokens": total_tok, "total_repos": total_repos, "total_files": total_files, "repos": results}, f, indent=2)
