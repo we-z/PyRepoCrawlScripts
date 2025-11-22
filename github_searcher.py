@@ -12,7 +12,7 @@ class GitHubSearcher:
         self.seen_file = data_dir / "seen_repos.json"
         self.queries_file = data_dir / "seen_queries.json"
         repos_dir = base / "cloned_repos"
-        self.cloned = {d.name.replace("_", "/", 1) for d in repos_dir.iterdir() if d.is_dir()} if repos_dir.exists() else set()
+        self.cloned = {d.name.replace("_", "/", 1) for d in os.scandir(repos_dir) if d.is_dir()} if repos_dir.exists() else set()
         self.seen = set(json.load(open(self.seen_file, 'r'))) if self.seen_file.exists() else set()
         self.seen_queries = set(json.load(open(self.queries_file, 'r'))) if self.queries_file.exists() else set()
         self.last_request_time, self.min_interval, self.session = 0, 2.0, None
