@@ -1,85 +1,65 @@
 #!/usr/bin/env python3
-"""Token Counter for cloned_repos/"""
-import sys
-import os
-import json
-from datetime import datetime
-from pathlib import Path
-import tiktoken
+"""Fast Token Counter for cloned_repos/"""
+import sys, os, json, time, tiktoken
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-BASE_DIR = Path(__file__).parent
-REPOS_DIR = BASE_DIR / "cloned_repos"
-OUTPUT_FILE = BASE_DIR / "token_counts.json"
+REPOS_DIR = "cloned_repos"
+OUTPUT_FILE = "token_counts.json"
 TOKENIZER = tiktoken.get_encoding("cl100k_base")
-MAX_FILE_SIZE = 5 * 1024 * 1024
-MAX_CONTENT_LEN = 5_000_000
+MAX_SIZE = 5 * 1024 * 1024
+MAX_LEN = 5_000_000
 
-def count_tokens_in_file(file_path: Path) -> int:
-    """Counts tokens in a single file, skipping large or non-UTF8 files."""
+def count_repo(repo_path):
+    tokens, files = 0, 0
     try:
-        if file_path.stat().st_size > MAX_FILE_SIZE or len(content := file_path.read_text(encoding='utf-8')) > MAX_CONTENT_LEN:
-            return 0
-        return len(TOKENIZER.encode(content, disallowed_special=()))
-    except (IOError, UnicodeDecodeError, AttributeError, FileNotFoundError):
-        return 0
-
-def count_repo_tokens(repo_path: Path) -> dict:
-    """Counts tokens for all processable files in a repository."""
-    stats = {"tokens": 0, "files_processed": 0}
-    try:
-        for file_path in repo_path.rglob('*'):
-            if file_path.is_file() and '.git' not in file_path.parts and (tokens := count_tokens_in_file(file_path)) > 0:
-                stats["tokens"] += tokens
-                stats["files_processed"] += 1
-    except Exception:
-        pass
-    return stats
+        for root, _, filenames in os.walk(repo_path):
+            if '.git' in root: continue
+            for name in filenames:
+                try:
+                    path = os.path.join(root, name)
+                    stat = os.stat(path)
+                    if stat.st_size > MAX_SIZE: continue
+                    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read(MAX_LEN)
+                        if content:
+                            tokens += len(TOKENIZER.encode(content, disallowed_special=()))
+                            files += 1
+                except Exception: pass
+    except Exception: pass
+    return tokens, files
 
 def main():
-    """Main function to count tokens in all repositories."""
-    if not REPOS_DIR.exists():
-        print(f"❌ No '{REPOS_DIR.name}' directory found!")
-        sys.exit(1)
-
-    print("Gathering list of repository directories...")
-    repo_dirs = [Path(e.path) for e in os.scandir(REPOS_DIR) if e.is_dir() and not e.name.startswith('.')]
+    if not os.path.exists(REPOS_DIR): return print(f"❌ No '{REPOS_DIR}' found!")
+    repo_dirs = [os.path.join(REPOS_DIR, d) for d in os.listdir(REPOS_DIR) if os.path.isdir(os.path.join(REPOS_DIR, d)) and not d.startswith('.')]
     total_repos = len(repo_dirs)
-    max_repo_name_len = min(max((len(d.name.replace("_", "/", 1)) for d in repo_dirs), default=30), 50)
-    progress_width = len(f"[{total_repos:,}/{total_repos:,}]")
-    repo_width = max_repo_name_len + 2
-    stats_width = total_width = 30
+    print(f"📊 Processing {total_repos:,} repositories with 128 workers...")
+    
+    results, total_tok, total_files, start_time = {}, 0, 0, time.time()
+    print(f"{'Progress':<18} {'Rate':<12} {'Repository':<40} {'Repo Stats':<25} {'Total Stats':<25}")
+    print("=" * 120)
 
-    print(f"📊 Counting tokens in {total_repos:,} repositories...\n")
-    print(f"{'Progress':<{progress_width}} {'Status':<7} {'Repository':<{repo_width}} {'Repo Stats':>{stats_width}} {'Running Total':>{total_width}}")
-    print("=" * (progress_width + 7 + repo_width + stats_width + total_width + 8))
-
-    results, total_tokens, total_files = {}, 0, 0
-    with ThreadPoolExecutor(max_workers=16) as executor:
-        futures = {executor.submit(count_repo_tokens, repo_dir): repo_dir for repo_dir in repo_dirs}
-        for i, future in enumerate(as_completed(futures), 1):
-            repo_dir = futures[future]
-            repo_name = repo_dir.name.replace("_", "/", 1)
-            repo_display_name = repo_name if len(repo_name) <= max_repo_name_len else repo_name[:max_repo_name_len-3] + "..."
-            progress_str = f"[{i:,}/{total_repos:,}]"
-
+    with ThreadPoolExecutor(max_workers=128) as exe:
+        futures = {exe.submit(count_repo, p): p for p in repo_dirs}
+        for i, f in enumerate(as_completed(futures), 1):
+            repo_path = futures[f]
+            name = os.path.basename(repo_path).replace("_", "/", 1)
             try:
-                stats = future.result()
-                results[repo_name] = stats
-                total_tokens += stats['tokens']
-                total_files += stats['files_processed']
-                repo_stats = f"{stats['tokens']:>15,} tok, {stats['files_processed']:>6,} files"
-                total_stats = f"{total_tokens:>15,} tok, {total_files:>6,} files"
-                print(f"{progress_str:<{progress_width}}  ✓     {repo_display_name:<{repo_width}} {repo_stats:>{stats_width}}  {total_stats:>{total_width}}")
+                t, c = f.result()
+                results[name] = {"tokens": t, "files_processed": c}
+                total_tok += t
+                total_files += c
+                
+                elapsed = time.time() - start_time
+                rate = i / elapsed if elapsed > 0 else 0
+                prog = f"[{i:,}/{total_repos:,}]"
+                r_stats = f"{t:,} tok, {c:,} files"
+                t_stats = f"{total_tok:,} tok, {total_files:,} files"
+                print(f"{prog:<18} {rate:>6.1f}/s   {name[:38]:<40} {r_stats:<25} {t_stats:<25}")
             except Exception as e:
-                print(f"{progress_str:<{progress_width}}  ✗     {repo_display_name:<{repo_width}} {'Error: ' + str(e):>{stats_width}}")
+                print(f"Error {name}: {e}")
 
-    print(f"\n\n✅ Token counting complete!")
-    OUTPUT_FILE.write_text(json.dumps({
-        "total_tokens": total_tokens, "total_repos": total_repos, "total_files_processed": total_files,
-        "counted_at": datetime.now().isoformat(), "repos": results
-    }, indent=2))
-    print(f"Total tokens: {total_tokens:,}\nSaved to: {OUTPUT_FILE}")
+    with open(OUTPUT_FILE, 'w') as f:
+        json.dump({"total_tokens": total_tok, "total_repos": total_repos, "total_files": total_files, "repos": results}, f, indent=2)
+    print(f"\n✅ Done! {total_tok:,} tokens in {total_files:,} files. Saved to {OUTPUT_FILE}")
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
